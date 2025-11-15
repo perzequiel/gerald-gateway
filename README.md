@@ -1,0 +1,36 @@
+# Gerald Gateway
+## Dependencies
+
+- Python 3.10+
+- Docker
+- PostgreSQL
+- Terraform
+
+## Local Install using virtual environment (venv)
+
+1) Create virtual env
+```bash
+python -m venv venv
+```
+
+2) Activate environment
+```bash
+# Unix / Linux / macOS
+source venv/bin/activate
+# Windows (CMD)
+venv\Scripts\activate.bat
+```
+
+3) Install dependencies
+```bash
+# For deveopment and testing purpose
+pip install -r requirements-dev.txt
+# For production or just running
+pip install -r requirements.txt
+```
+
+4) Run test
+```bash
+python -m pytest
+```
+
