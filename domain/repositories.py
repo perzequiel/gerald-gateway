@@ -1,0 +1,9 @@
+from typing import Optional, Protocol
+from domain.entities import Decision, Transaction
+
+class UserRepository(Protocol):
+    async def get_transactions(self, user_id: str) -> list[Transaction]: ...
+
+class DecisionRepository(Protocol):
+    async def get_user_transactions(self, user_id: str) -> list[Transaction]: ...
+    async def save(self, decision: Decision) -> None: ...

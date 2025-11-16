@@ -1,9 +1,56 @@
 import datetime
-from typing import Any, Dict
+from typing import Any, Dict, TypedDict
+
 from domain.entities import Transaction
 
+
+class ComponentScores(TypedDict):
+    balance_score: float
+    income_spend_score: float
+    nsf_score: float
+
+class RiskScore(TypedDict):
+    def __init__(
+        self,
+        avg_daily_balance_cents: int,
+        monthly_income_cents: int,
+        monthly_spend_cents: int,
+        nsf_count: int,
+        balance_score: float,
+        income_spend_score: float,
+        nsf_score: float,
+        final_score: float,
+        max_amount_for_limit_bucket: int,
+        limit_bucket: str,
+        limit_amount: int,
+        reasons: list[str],
+    ):
+        self.avg_daily_balance_cents = avg_daily_balance_cents
+        self.monthly_income_cents = monthly_income_cents
+        self.monthly_spend_cents = monthly_spend_cents
+        self.nsf_count = nsf_count
+        self.balance_score = balance_score
+        self.income_spend_score = income_spend_score
+        self.nsf_score = nsf_score
+        self.final_score = final_score
+        self.limit_bucket = limit_bucket
+        self.limit_amount = limit_amount
+        self.reasons = reasons
+        self.max_amount_for_limit_bucket = max_amount_for_limit_bucket
+        self.component_scores = ComponentScores(
+            balance_score=balance_score,
+            income_spend_score=income_spend_score,
+            nsf_score=nsf_score
+        )
+
 class RiskCalculationService:
-    def __init__(self, balance_neg_cap: int = 10_000, nsf_penalty: float = 25.0, balance_weight: float = 0.5, income_spend_weight: float = 0.3, nsf_weight: float = 0.2):
+    def __init__(self, balance_neg_cap: int = 10_000,
+        nsf_penalty: float = 25.0,
+        balance_weight: float = 0.5,
+        income_spend_weight: float = 0.3,
+        nsf_weight: float = 0.2,
+        max_amount_for_limit_bucket: int = 100_000
+    ):
         # this is the balance negative cap, if the average daily balance is less than this value, the score is 0
         self.balance_neg_cap = balance_neg_cap
         # this is the penalty for each NSF event, if the number of NSF events is greater than 0, the score is reduced by this value
@@ -14,6 +61,8 @@ class RiskCalculationService:
         self.income_spend_weight = income_spend_weight
         # this is the weight for the NSF score, if the NSF score is greater than 0, the score is increased by this value
         self.nsf_weight = nsf_weight
+        # maximum amount for the limit bucket $1000+
+        self.max_amount_for_limit_bucket = max_amount_for_limit_bucket
 
     # private method
     def __clamp(self, x: float, lo: float, hi: float) -> float:
@@ -65,7 +114,7 @@ class RiskCalculationService:
                 daily_balances.append(last_known if last_known is not None else 0)
         return sum(daily_balances) / max(1, len(daily_balances))
 
-    def calculate_risk(self, transactions: list[Transaction]) -> Dict[str, Any]:
+    def calculate_risk(self, transactions: list[Transaction]) -> RiskScore:
         """
         Input: list of transactions (each with keys: 'date' YYYY-MM-DD, 'amount_cents', 'type' ('debit'|'credit'),
             'balance_cents' (opcional), 'nsf' (optional bool)).
@@ -137,13 +186,16 @@ class RiskCalculationService:
         # --- bucket mapping (simple example) ---
         if final_score < 20:
             limit_bucket = "$0"
+            limit_amount = 0
         elif final_score < 40:
             limit_bucket = "$100 - $400"
+            limit_amount = 400
         elif final_score < 70:
             limit_bucket = "$500"
+            limit_amount = 500
         else:
             limit_bucket = "$1000+"
-
+            limit_amount = self.max_amount_for_limit_bucket
         # reasons breakdown
         reasons = []
         if avg_daily_balance < 0:
@@ -153,17 +205,22 @@ class RiskCalculationService:
         if nsf_count > 0:
             reasons.append(f"{nsf_count} overdraft/nsf events")
 
-        return {
-            "avg_daily_balance_cents": int(avg_daily_balance),
-            "monthly_income_cents": int(monthly_income),
-            "monthly_spend_cents": int(monthly_spend),
-            "nsf_count": nsf_count,
-            "component_scores": {
-                "balance_score": round(balance_score, 1),
-                "income_spend_score": round(income_spend_score, 1),
-                "nsf_score": round(nsf_score, 1),
-            },
-            "final_score": round(final_score, 1),
-            "limit_bucket": limit_bucket,
-            "reasons": reasons
-        }
+        return RiskScore(
+            avg_daily_balance_cents=int(avg_daily_balance), 
+            monthly_income_cents=int(monthly_income),
+            monthly_spend_cents=int(monthly_spend),
+            nsf_count=nsf_count,
+            balance_score=round(balance_score, 1),
+            income_spend_score=round(income_spend_score, 1),
+            nsf_score=round(nsf_score, 1),
+            final_score=round(final_score, 1),
+            limit_bucket=limit_bucket,
+            limit_amount=limit_amount,
+            reasons=reasons,
+            component_scores=ComponentScores(
+                balance_score=round(balance_score, 1),
+                income_spend_score=round(income_spend_score, 1),
+                nsf_score=round(nsf_score, 1)
+            ),
+            max_amount_for_limit_bucket=self.max_amount_for_limit_bucket
+        )
