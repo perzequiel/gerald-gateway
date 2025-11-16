@@ -1,7 +1,7 @@
 # create a test for the plan entity
 
 from datetime import datetime
-from domain.entities import Decision, Plan, User
+from domain.entities import Decision, Plan, User, Installment, InstallmentStatus
 
 def test_decision_entity_create():
     decision = Decision.create(user_id="123", amount_requested_cents=1000)
@@ -33,3 +33,13 @@ def test_user_entity_get_transactions():
     assert transactions[0].merchant == "FoodiePlace"
     assert transactions[0].balance_cents == 1000
     assert transactions[0].nsf is False
+
+def test_installment_entity_create():
+    installment = Installment.create(plan_id="123", due_date=datetime.now(), amount_cents=1000)
+    assert installment is not None
+    assert installment.id is not None
+    assert installment.plan_id == "123"
+    assert installment.due_date is not None
+    assert installment.amount_cents == 1000
+    assert installment.status == InstallmentStatus.PENDING
+    assert installment.created_at is not None

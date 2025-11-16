@@ -20,4 +20,5 @@ class ValidateDecisionService:
             decision.set_plan(plan=plan)
             decision.set_approved(approved=approved)
             decision.set_amount_granted_cents(amount_granted_cents=amount_granted_cents)
+            decision.set_credit_limit_cents(credit_limit_cents=min(amount_requested_cents, risk_score['limit_amount']))
         return decision

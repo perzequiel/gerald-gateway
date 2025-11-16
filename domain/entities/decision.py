@@ -39,3 +39,7 @@ class Decision:
     def set_amount_granted_cents(self, amount_granted_cents: int) -> 'Decision':
         self.amount_granted_cents = amount_granted_cents
         return self
+
+    def set_credit_limit_cents(self, credit_limit_cents: int) -> 'Decision':
+        self.credit_limit_cents = credit_limit_cents
+        return self

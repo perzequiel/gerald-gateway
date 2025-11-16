@@ -70,13 +70,15 @@ class RiskCalculationService:
 
     # private method
     def __normalize_and_sort_transactions(self, transactions: list[Transaction]) -> list[Transaction]:
-        txs = sorted(transactions, key=lambda t: t.date)
-        # convert dates to objects if they are strings
-        for t in txs:
+        # Normalize dates to date objects (drop time) deterministically
+        for t in transactions:
             if isinstance(t.date, str):
-                t.date = datetime.strptime(t.date, "%Y-%m-%d").date()
-            else:
-                t.date = t.date
+                t.date = datetime.datetime.strptime(t.date, "%Y-%m-%d").date()
+            elif isinstance(t.date, datetime.datetime):
+                t.date = t.date.date()
+            # if already a date, keep it
+        # Stable sort by date (preserves input order within the same day)
+        txs = sorted(transactions, key=lambda t: t.date)
         return txs
 
     # private method
@@ -85,13 +87,15 @@ class RiskCalculationService:
         last_known_balance = 0
         for t in transactions:
             day = t.date
-            # prefer balance_cents if available
+            # Update rolling last known balance if this txn reports one
             if t.balance_cents is not None:
-                day_last_balance[day] = t.balance_cents
                 last_known_balance = t.balance_cents
-            # if any day doesn't have balance reported, we'll fill with carry-forward
-            else:
-                day_last_balance[day] = last_known_balance
+            # Record the FIRST value for the day only (first-of-day policy)
+            if day not in day_last_balance:
+                if t.balance_cents is not None:
+                    day_last_balance[day] = t.balance_cents
+                else:
+                    day_last_balance[day] = last_known_balance
         return day_last_balance
 
     def __calculate_avg_daily_balance(self, transactions: list[Transaction]) -> float:
@@ -143,8 +147,10 @@ class RiskCalculationService:
                 total_spend += t.amount_cents
 
         # monthlyize: calculate factor months in the period (portions of 30 days)
-        start = transactions[0].date
-        end = transactions[-1].date
+        # Use normalized, sorted transactions for deterministic start/end
+        txs_norm = self.__normalize_and_sort_transactions(transactions)
+        start = txs_norm[0].date
+        end = txs_norm[-1].date
         period_days = max(1, (end - start).days + 1)
         months = period_days / 30.0
         months = max(months, 1/30)  # avoid div by 0
