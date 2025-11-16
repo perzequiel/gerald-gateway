@@ -1,9 +1,9 @@
 from domain.entities import Decision, Plan
-from domain.repositories import DecisionRepository
-from domain.services.risk_calculation import RiskCalculationService
+from domain.interfaces import TransactionRepository
+from domain.services import RiskCalculationService
 
 class ValidateDecisionService:
-    def __init__(self, repo: DecisionRepository):
+    def __init__(self, repo: TransactionRepository):
         self.repo = repo # Repository 
     
     async def execute(self, user_id: str, amount_requested_cents: int) -> Decision:

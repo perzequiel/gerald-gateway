@@ -5,24 +5,23 @@ import pytest
 
 from application.service.validate_decision import ValidateDecisionService
 from domain.entities import InstallmentStatus, Transaction
-from domain.repositories import DecisionRepository
+from domain.interfaces.transaction_repo import TransactionRepository
 
 
 
 @pytest.fixture
 def mock_decision_repo_no_transactions(mocker):
     """Fixture to create a mock of the repository using pytest-mock"""
-    mock_repo = mocker.AsyncMock(spec=DecisionRepository)
+    mock_repo = mocker.AsyncMock(spec=TransactionRepository)
     # Default behavior
     mock_repo.get_user_transactions.return_value = []
-    mock_repo.save.return_value = None
     return mock_repo
 
 
 @pytest.fixture
 def mock_decision_repo_with_transactions_higher(mocker):
     """Fixture to create a mock of the repository using pytest-mock"""
-    mock_repo = mocker.AsyncMock(spec=DecisionRepository) 
+    mock_repo = mocker.AsyncMock(spec=TransactionRepository) 
     mock_repo.get_user_transactions.return_value = [
         Transaction(
             transaction_id="123",
@@ -35,13 +34,12 @@ def mock_decision_repo_with_transactions_higher(mocker):
             balance_cents=1000,
             nsf=False
         )]
-    mock_repo.save.return_value = None
     return mock_repo
 
 @pytest.fixture
 def mock_decision_repo_with_transactions_middle(mocker):
     """Fixture to create a mock of the repository using pytest-mock"""
-    mock_repo = mocker.AsyncMock(spec=DecisionRepository) 
+    mock_repo = mocker.AsyncMock(spec=TransactionRepository) 
     mock_repo.get_user_transactions.return_value = [
         Transaction(
             transaction_id="123",
@@ -54,13 +52,12 @@ def mock_decision_repo_with_transactions_middle(mocker):
             balance_cents=500,
             nsf=True
         )]
-    mock_repo.save.return_value = None
     return mock_repo
 
 @pytest.fixture
 def mock_decision_repo_with_transactions_lower(mocker):
     """Fixture to create a mock of the repository using pytest-mock"""
-    mock_repo = mocker.AsyncMock(spec=DecisionRepository)
+    mock_repo = mocker.AsyncMock(spec=TransactionRepository)
     mock_repo.get_user_transactions.return_value = [
         Transaction(
             transaction_id="123",
@@ -73,7 +70,6 @@ def mock_decision_repo_with_transactions_lower(mocker):
             balance_cents=-10000,
             nsf=True
         )]
-    mock_repo.save.return_value = None
     return mock_repo
 
 @pytest.mark.asyncio
