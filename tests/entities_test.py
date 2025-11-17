@@ -41,5 +41,5 @@ def test_installment_entity_create():
     assert installment.plan_id == "123"
     assert installment.due_date is not None
     assert installment.amount_cents == 1000
-    assert installment.status == InstallmentStatus.PENDING
+    assert installment.status == InstallmentStatus.PENDING.value
     assert installment.created_at is not None

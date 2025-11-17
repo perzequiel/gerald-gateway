@@ -43,3 +43,7 @@ class Decision:
     def set_credit_limit_cents(self, credit_limit_cents: int) -> 'Decision':
         self.credit_limit_cents = credit_limit_cents
         return self
+    
+    def set_score(self, score: float) -> 'Decision':
+        self.score = score
+        return self

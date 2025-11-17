@@ -1,12 +1,28 @@
 import time
+from typing import Optional
 from domain.entities import Decision, Plan
-from domain.interfaces import TransactionRepository
+from domain.interfaces import TransactionRepository, DecisionRepository, PlanRepository
 from domain.services import RiskCalculationService
 from infrastructure.logging.structlog_logs import logger
 
 class ValidateDecisionService:
-    def __init__(self, repo: TransactionRepository):
-        self.repo = repo # Repository 
+    def __init__(
+        self,
+        transaction_repo: TransactionRepository,
+        decision_repo: Optional[DecisionRepository] = None,
+        plan_repo: Optional[PlanRepository] = None
+    ):
+        """
+        Initialize the decision validation service.
+        
+        Args:
+            transaction_repo: Repository for fetching transactions (required)
+            decision_repo: Repository for saving decisions (optional)
+            plan_repo: Repository for saving plans (optional)
+        """
+        self.transaction_repo = transaction_repo
+        self.decision_repo = decision_repo
+        self.plan_repo = plan_repo 
     
     async def execute(self, user_id: str, amount_requested_cents: int, request_id: str = None) -> Decision:
         """
@@ -33,7 +49,7 @@ class ValidateDecisionService:
             # Step 1: Get transactions
             log.info("fetching_transactions", step="bank_fetch")
             fetch_start = time.time()
-            transactions = await self.repo.get_user_transactions(user_id)
+            transactions = await self.transaction_repo.get_user_transactions(user_id)
             fetch_duration = (time.time() - fetch_start) * 1000
             log.info(
                 "transactions_fetched",
@@ -75,6 +91,7 @@ class ValidateDecisionService:
             
             # Step 3: Create decision
             decision = Decision.create(user_id=user_id, amount_requested_cents=amount_requested_cents)
+            decision.set_score(score)
             
             if approved:
                 amount_granted_cents = min(amount_requested_cents, risk_score['limit_amount'])
@@ -102,6 +119,16 @@ class ValidateDecisionService:
                     score=score,
                     reason="amount_exceeds_limit" if 'error' not in risk_score else "risk_calculation_error"
                 )
+            
+            # Save decision to database FIRST (before plan, since plan has FK to decision)
+            if self.decision_repo:
+                log.info("saving_decision", step="db_persist")
+                await self.decision_repo.save_decision(decision, risk_score=risk_score)
+            
+            # Save plan to database AFTER decision is saved (plan references decision)
+            if approved and self.plan_repo:
+                log.info("saving_plan", step="db_persist")
+                await self.plan_repo.save_plan(plan)
             
             # Log final with total duration
             total_duration = (time.time() - start_time) * 1000

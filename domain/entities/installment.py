@@ -24,6 +24,6 @@ class Installment:
             plan_id=plan_id, 
             due_date=due_date, 
             amount_cents=amount_cents, 
-            status=InstallmentStatus.PENDING,
+            status=InstallmentStatus.PENDING.value,  # Convert Enum to string
             created_at=datetime.now()
         )

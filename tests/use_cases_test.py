@@ -157,7 +157,7 @@ async def test_validate_decision_with_plan_approved_bi_weekly_installment(mock_d
     assert decision.plan.installments[0].plan_id == decision.plan.id
     assert decision.plan.installments[0].due_date is not None
     assert decision.plan.installments[0].amount_cents == 125
-    assert decision.plan.installments[0].status == InstallmentStatus.PENDING
+    assert decision.plan.installments[0].status == InstallmentStatus.PENDING.value
     # 4 bi-weekly created at
     for i in range(len(decision.plan.installments)):
         assert decision.plan.installments[i].due_date.date() == (
