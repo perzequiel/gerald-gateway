@@ -1,0 +1,11 @@
+init_config:
+
+instances:
+  - prometheus_url: "http://host.docker.internal:8080/metrics"
+    namespace: "gerald_gateway"
+    metrics:
+      - "*"
+      # - "gerald_decision_total"
+      # - "gerald_credit_limit_bucket"
+      # - "bank_fetch_failures_total"
+      # - "webhook_latency_seconds"

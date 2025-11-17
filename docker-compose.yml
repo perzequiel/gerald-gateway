@@ -1,0 +1,19 @@
+services:
+  dd-agent:
+    image: gcr.io/datadoghq/agent:7
+    container_name: dd-agent
+    environment:
+      - DD_API_KEY=23beea1247725a25b511408019727076e02d38ede1897f2f33d0ff58ee44b611
+      - DD_SITE=datadoghq.com
+      - DD_LOGS_ENABLED=true
+      - DD_APM_ENABLED=true
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - ./docker/datadog/prometheus:/etc/datadog-agent/conf.d/prometheus.d:ro
+    ports: 
+      - "8126:8126"   # apm
+      - "4317:4317"   # otel
+      - "8125:8125/udp"  # dogstatsd (evita el error feo)

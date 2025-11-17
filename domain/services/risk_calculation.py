@@ -1,7 +1,12 @@
-import datetime
-from typing import Any, Dict, TypedDict
+from datetime import datetime, timedelta
+from typing import TypedDict
 
-from domain.entities import Transaction
+class InternalTransaction:
+    date: datetime
+    amount_cents: int
+    type: str
+    balance_cents: int
+    nsf: bool
 
 
 class ComponentScores(TypedDict):
@@ -69,12 +74,12 @@ class RiskCalculationService:
         return max(lo, min(hi, x))
 
     # private method
-    def __normalize_and_sort_transactions(self, transactions: list[Transaction]) -> list[Transaction]:
+    def __normalize_and_sort_transactions(self, transactions: list[InternalTransaction]) -> list[InternalTransaction]:
         # Normalize dates to date objects (drop time) deterministically
         for t in transactions:
             if isinstance(t.date, str):
-                t.date = datetime.datetime.strptime(t.date, "%Y-%m-%d").date()
-            elif isinstance(t.date, datetime.datetime):
+                t.date = datetime.strptime(t.date, "%Y-%m-%d").date()
+            elif isinstance(t.date, datetime):
                 t.date = t.date.date()
             # if already a date, keep it
         # Stable sort by date (preserves input order within the same day)
@@ -82,7 +87,7 @@ class RiskCalculationService:
         return txs
 
     # private method
-    def __fill_days_with_carry_forward(self, transactions: list[Transaction]) -> list[Transaction]:
+    def __fill_days_with_carry_forward(self, transactions: list[InternalTransaction]) -> list[InternalTransaction]:
         day_last_balance = {}
         last_known_balance = 0
         for t in transactions:
@@ -98,7 +103,7 @@ class RiskCalculationService:
                     day_last_balance[day] = last_known_balance
         return day_last_balance
 
-    def __calculate_avg_daily_balance(self, transactions: list[Transaction]) -> float:
+    def __calculate_avg_daily_balance(self, transactions: list[InternalTransaction]) -> float:
         # --- normalize and sort ---
         txs = self.__normalize_and_sort_transactions(transactions)
         # --- build day -> last balance available that day ---
@@ -110,7 +115,7 @@ class RiskCalculationService:
         num_days = (end - start).days + 1
         last_known = None
         for i in range(num_days):
-            d = start + datetime.timedelta(days=i)
+            d = start + timedelta(days=i)
             if d in day_last_balance:
                 last_known = day_last_balance[d]
                 daily_balances.append(last_known)
@@ -118,7 +123,7 @@ class RiskCalculationService:
                 daily_balances.append(last_known if last_known is not None else 0)
         return sum(daily_balances) / max(1, len(daily_balances))
 
-    def calculate_risk(self, transactions: list[Transaction]) -> RiskScore:
+    def calculate_risk(self, transactions: list[InternalTransaction]) -> RiskScore:
         """
         Input: list of transactions (each with keys: 'date' YYYY-MM-DD, 'amount_cents', 'type' ('debit'|'credit'),
             'balance_cents' (opcional), 'nsf' (optional bool)).
