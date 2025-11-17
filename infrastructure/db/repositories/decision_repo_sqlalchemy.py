@@ -20,15 +20,6 @@ class DecisionRepoSqlalchemy(DecisionRepository):
         await self.db.refresh(decision_model)
         return decision
     
-    async def get_decision(self, decision_id: str) -> Optional[Decision]:
-        """Get a decision by ID."""
-        stmt = select(DecisionModel).where(DecisionModel.id == decision_id)
-        result = await self.db.execute(stmt)
-        decision_model = result.scalar_one_or_none()
-        if decision_model:
-            return decision_model.to_domain()
-        return None
-    
     async def get_user_decisions(self, user_id: str, limit: int = 10) -> list[Decision]:
         """Get recent decisions for a user."""
         stmt = (

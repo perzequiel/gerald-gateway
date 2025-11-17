@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from application.service.decision_history import DecisionHistoryService
 from application.service.get_plan import GetPlanService
-from infrastructure.clients import TransactionRepoAPI, BankClient
+from infrastructure.clients import TransactionRepoAPI, BankClient, WebhookClient, WebhookService
 from infrastructure.db.database import get_db_session
 from infrastructure.db.repositories.decision_repo_sqlalchemy import DecisionRepoSqlalchemy
 from infrastructure.db.repositories.plan_repo_sqlalchemy import PlanRepoSqlalchemy
@@ -10,14 +10,19 @@ from app.schemas.desicion_schema import DecisionCreate, DecisionResponse, PlanRe
 from application.service.validate_decision import ValidateDecisionService
 from domain.exceptions import BankAPIError
 import uuid
+import os
 
-def url_builder() -> str:
-    return f"http://localhost:8001/"
+
+def bank_url_builder() -> str:
+    return os.getenv("BANK_API_URL", "http://localhost:8001")
+
+def ledger_url_builder() -> str:
+    return os.getenv("LEDGER_WEBHOOK_URL", "http://localhost:8002")
 
 router = APIRouter(prefix="/v1")
 
-@router.post("/desicion")
-async def desicion(
+@router.post("/decision")
+async def decision(
     payload: DecisionCreate,
     request: Request,
     db: AsyncSession = Depends(get_db_session)
@@ -36,17 +41,28 @@ async def desicion(
     
     try:
         # Create transaction repository (API-based)
-        transaction_repo = TransactionRepoAPI(BankClient(base_url=url_builder()))
+        bank_url = bank_url_builder()
+        transaction_repo = TransactionRepoAPI(BankClient(base_url=bank_url))
         
         # Create decision and plan repositories (database-based)
         decision_repo = DecisionRepoSqlalchemy(db)
         plan_repo = PlanRepoSqlalchemy(db)
         
-        # Initialize service with all repositories
+        # Create webhook service for sending webhooks to ledger
+        ledger_url = ledger_url_builder()
+        webhook_client = WebhookClient(base_url=ledger_url)
+        webhook_service = WebhookService(
+            webhook_client=webhook_client,
+            db_session=db,
+            target_url=ledger_url
+        )
+        
+        # Initialize service with all repositories and webhook
         srv = ValidateDecisionService(
             transaction_repo=transaction_repo,
             decision_repo=decision_repo,
-            plan_repo=plan_repo
+            plan_repo=plan_repo,
+            webhook_port=webhook_service
         )
         
         decision = await srv.execute(
@@ -68,8 +84,8 @@ async def desicion(
             detail={"error": "bank_api_error", "message": str(e)}
         )
 
-@router.get("/desicion/history")
-async def desicion_history(user_id: str, db: AsyncSession = Depends(get_db_session)) -> list[DecisionResponse]:
+@router.get("/decision/history")
+async def decision_history(user_id: str, db: AsyncSession = Depends(get_db_session)) -> list[DecisionResponse]:
     """
     Get the history of decisions for a user.
     """

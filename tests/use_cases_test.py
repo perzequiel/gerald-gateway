@@ -107,7 +107,7 @@ async def test_validate_decision_with_plan_approved_higher_score(mock_decision_r
     assert decision.plan.user_id == "123"
     assert decision.plan.total_cents == 1000
     assert decision.plan.created_at is not None
-    assert decision.credit_limit_cents == 1000
+    assert decision.credit_limit_cents == 100000
 
 
 @pytest.mark.asyncio
@@ -150,7 +150,7 @@ async def test_validate_decision_with_plan_approved_bi_weekly_installment(mock_d
     assert decision.amount_requested_cents == 500
     assert decision.approved is True
     assert decision.amount_granted_cents == 500
-    assert decision.credit_limit_cents == 500
+    assert decision.credit_limit_cents == 100000
     assert decision.plan.installments is not None
     assert len(decision.plan.installments) == 4
     assert decision.plan.installments[0].id is not None

@@ -9,6 +9,7 @@ from infrastructure.db.models.base import Base
 from infrastructure.db.models.desicions import DecisionModel
 from infrastructure.db.models.plans import PlanModel
 from infrastructure.db.models.installments import InstallmentModel
+from infrastructure.db.models.webhook_attempts import OutboundWebhookModel
 
-__all__ = ["Base", "DecisionModel", "PlanModel", "InstallmentModel"]
+__all__ = ["Base", "DecisionModel", "PlanModel", "InstallmentModel", "OutboundWebhookModel"]
 

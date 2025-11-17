@@ -4,7 +4,7 @@ from infrastructure.metrics.metrics import metrics_endpoint
 from app.routers.v1 import router
 
 # Import database models to ensure they're registered
-from infrastructure.db.models import Base, DecisionModel, PlanModel, InstallmentModel  # noqa: F401
+from infrastructure.db.models import Base, DecisionModel, PlanModel, InstallmentModel, OutboundWebhookModel  # noqa: F401
 
 app = FastAPI(title="gerald-gateway")
 
