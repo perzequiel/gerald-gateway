@@ -33,14 +33,20 @@ class DecisionModel(Base):
         )
 
     @classmethod
-    def from_domain(cls, decision: Decision, risk_score: Optional[dict] = None) -> "DecisionModel":
+    def from_domain(cls, decision: Decision, risk_score: Optional[dict] = None, request_id: Optional[str] = None) -> "DecisionModel":
         """
         Convert domain Decision to database model.
         
         Args:
             decision: Domain Decision entity
             risk_score: Optional risk score dict for additional fields
+            request_id: Optional request ID for idempotency (stored in risk_factors)
         """
+        # Store request_id in risk_factors JSONB field for idempotency
+        risk_factors = risk_score.copy() if risk_score else {}
+        if request_id:
+            risk_factors['_request_id'] = request_id  # Prefix with _ to avoid conflicts
+        
         return cls(
             id=decision.id,
             user_id=decision.user_id,
@@ -50,6 +56,6 @@ class DecisionModel(Base):
             amount_granted_cents=decision.amount_granted_cents,
             score_numeric=decision.score,
             score_band=risk_score.get('limit_bucket', '') if risk_score else '',
-            risk_factors=risk_score if risk_score else {},
+            risk_factors=risk_factors,
             created_at=decision.created_at,
         )

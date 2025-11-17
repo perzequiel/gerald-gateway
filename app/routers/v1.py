@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from application.service.decision_history import DecisionHistoryService
 from application.service.get_plan import GetPlanService
@@ -24,7 +25,12 @@ router = APIRouter(prefix="/v1")
 @router.post("/decision")
 async def decision(
     payload: DecisionCreate,
-    request: Request,
+    x_request_id: Optional[str] = Header(
+        None,
+        alias="X-Request-ID",
+        description="Request ID for idempotency. If provided, duplicate requests with the same ID will return the same decision.",
+        example="550e8400-e29b-41d4-a716-446655440000"
+    ),
     db: AsyncSession = Depends(get_db_session)
 ) -> DecisionResponse:
     """
@@ -35,18 +41,43 @@ async def decision(
     - Calculates risk score
     - Creates decision and plan (if approved)
     - Saves to database if repositories are configured
+    
+    **Idempotency**: If you send the same `X-Request-ID` header, you'll receive the same decision response without creating a duplicate.
     """
-    # Obtain request ID from headers
-    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    # Obtain request ID from headers (use provided or generate new)
+    request_id = x_request_id or str(uuid.uuid4())
     
     try:
+        # Create decision repository first to check for idempotency
+        decision_repo = DecisionRepoSqlalchemy(db)
+        plan_repo = PlanRepoSqlalchemy(db)
+        
+        # Check if decision already exists for this request_id (idempotency)
+        if request_id:
+            existing_decision = await decision_repo.get_decision_by_request_id(request_id)
+            if existing_decision:
+                # Load plan if it exists
+                plan_id = None
+                if existing_decision.approved:
+                    # Get plan by decision_id
+                    from infrastructure.db.models.plans import PlanModel
+                    from sqlalchemy import select
+                    stmt = select(PlanModel).where(PlanModel.decision_id == existing_decision.id)
+                    result = await db.execute(stmt)
+                    plan_model = result.scalar_one_or_none()
+                    plan_id = plan_model.id if plan_model else None
+                
+                # Return existing decision (idempotent response)
+                return DecisionResponse(
+                    approved=existing_decision.approved,
+                    credit_limit_cents=existing_decision.credit_limit_cents,
+                    amount_granted_cents=existing_decision.amount_granted_cents,
+                    plan_id=plan_id or ""
+                )
+        
         # Create transaction repository (API-based)
         bank_url = bank_url_builder()
         transaction_repo = TransactionRepoAPI(BankClient(base_url=bank_url))
-        
-        # Create decision and plan repositories (database-based)
-        decision_repo = DecisionRepoSqlalchemy(db)
-        plan_repo = PlanRepoSqlalchemy(db)
         
         # Create webhook service for sending webhooks to ledger
         ledger_url = ledger_url_builder()

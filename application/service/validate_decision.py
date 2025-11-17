@@ -140,7 +140,7 @@ class ValidateDecisionService:
             # Save decision to database FIRST (before plan, since plan has FK to decision)
             if self.decision_repo:
                 log.info("saving_decision", step="db_persist")
-                await self.decision_repo.save_decision(decision, risk_score=risk_score)
+                await self.decision_repo.save_decision(decision, risk_score=risk_score, request_id=request_id)
             
             # Save plan to database AFTER decision is saved (plan references decision)
             if approved and self.plan_repo:
