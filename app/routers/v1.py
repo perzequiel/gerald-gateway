@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from application.service.decision_history import DecisionHistoryService
 from application.service.get_plan import GetPlanService
 from infrastructure.clients import TransactionRepoAPI, BankClient
 from infrastructure.db.database import get_db_session
 from infrastructure.db.repositories.decision_repo_sqlalchemy import DecisionRepoSqlalchemy
 from infrastructure.db.repositories.plan_repo_sqlalchemy import PlanRepoSqlalchemy
-from app.schemas.desicion_schema import DecisionCreate, DecisionResponse, PlanResponse
+from app.schemas.desicion_schema import DecisionCreate, DecisionResponse, PlanResponse, InstallmentResponse
 from application.service.validate_decision import ValidateDecisionService
 from domain.exceptions import BankAPIError
 import uuid
@@ -68,8 +69,14 @@ async def desicion(
         )
 
 @router.get("/desicion/history")
-async def desicion_history(user_id: str):
-    return {"status": "ok", "message": "desicion history is running"}
+async def desicion_history(user_id: str, db: AsyncSession = Depends(get_db_session)) -> list[DecisionResponse]:
+    """
+    Get the history of decisions for a user.
+    """
+    decision_repo = DecisionRepoSqlalchemy(db)
+    srv = DecisionHistoryService(decision_repo)
+    decisions = await srv.execute(user_id)
+    return decisions
 
 @router.get("/plan/{plan_id}")
 async def plan(plan_id: str, db: AsyncSession = Depends(get_db_session)) -> PlanResponse:
@@ -92,7 +99,6 @@ async def plan(plan_id: str, db: AsyncSession = Depends(get_db_session)) -> Plan
     # Convert installments to response format
     installments = []
     if plan.installments:
-        from app.schemas.desicion_schema import InstallmentResponse
         installments = [
             InstallmentResponse(
                 id=inst.id,
