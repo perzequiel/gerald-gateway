@@ -34,3 +34,8 @@ pip install -r requirements.txt
 python -m pytest
 ```
 
+5) Run Server
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8080
+```
+
