@@ -6,7 +6,7 @@ import os
 
 # Import all models to ensure they're registered in the same registry
 # This must happen before creating the engine
-from infrastructure.db.models import Base, DecisionModel, PlanModel, InstallmentModel  # noqa: F401
+from infrastructure.db.models import Base, DecisionModel, PlanModel, InstallmentModel, OutboundWebhookModel  # noqa: F401
 
 # Database configuration from environment variables
 DB_HOST = os.getenv("DB_HOST", "localhost")

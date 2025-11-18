@@ -1,6 +1,7 @@
 """
 Webhook service that sends webhooks and records attempts in the database.
 """
+import os
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -11,7 +12,6 @@ from sqlalchemy import select
 from infrastructure.clients.webhook_client import WebhookClient
 from infrastructure.db.models.webhook_attempts import OutboundWebhookModel
 from infrastructure.logging.structlog_logs import logger
-from domain.interfaces import WebhookPort
 
 
 class WebhookService:
@@ -86,40 +86,27 @@ class WebhookService:
             "request_id": request_id
         }
         
-        # Create or get existing webhook record
+        # Create webhook record
         webhook_record = None
         if self.db_session:
             try:
-                # Check if webhook record already exists for this plan
-                result = await self.db_session.execute(
-                    select(OutboundWebhookModel).where(
-                        OutboundWebhookModel.plan_id == plan_id
-                    )
+                # Create new webhook record for each attempt
+                params = "?mode=fail" if os.getenv("LEDGER_MODE_FAIL", "") == "fail" else ""
+                webhook_id = str(uuid4())
+                webhook_record = OutboundWebhookModel.create(
+                    webhook_id=webhook_id,
+                    event_type="BNPL_APPROVED",
+                    payload=payload,
+                    target_url=f"{self.target_url}/mock-ledger{params}"
                 )
-                webhook_record = result.scalar_one_or_none()
+                self.db_session.add(webhook_record)
+                # Don't flush yet - we'll commit after updating with results
                 
-                if not webhook_record:
-                    # Create new webhook record
-                    webhook_id = str(uuid4())
-                    webhook_record = OutboundWebhookModel.create(
-                        webhook_id=webhook_id,
-                        event_type="BNPL_APPROVED",
-                        payload=payload,
-                        target_url=f"{self.target_url}/mock-ledger",
-                        plan_id=plan_id
-                    )
-                    self.db_session.add(webhook_record)
-                    await self.db_session.flush()  # Flush to get the ID
-                    
-                    log.info(
-                        "webhook_record_created",
-                        step="webhook_service",
-                        webhook_id=webhook_id
-                    )
-                else:
-                    # Update existing record - reset status to pending for new attempt
-                    webhook_record.status = "pending"
-                    webhook_record.payload = payload  # Update payload in case it changed
+                log.info(
+                    "webhook_record_created",
+                    step="webhook_service",
+                    webhook_id=webhook_id
+                )
                     
             except Exception as e:
                 log.error(
@@ -129,10 +116,17 @@ class WebhookService:
                     exc_info=True
                 )
                 await self.db_session.rollback()
+                webhook_record = None  # Ensure it's None if creation failed
+        
+        # Pass db_session and webhook_record to WebhookClient for recording individual attempts
+        if self.db_session and webhook_record:
+            self.webhook_client._db_session = self.db_session
+            self.webhook_client._webhook_id = webhook_record.id
+            self.webhook_client._webhook_record = webhook_record
         
         # Send webhook (WebhookClient handles retries internally)
         attempt_start = time.time()
-        success = await self.webhook_client.send_webhook(
+        success, attempt_count = await self.webhook_client.send_webhook(
             plan_id=plan_id,
             decision_id=decision_id,
             user_id=user_id,
@@ -141,29 +135,84 @@ class WebhookService:
         )
         attempt_duration = (time.time() - attempt_start) * 1000
         
-        # Update webhook record with attempt results
-        if self.db_session and webhook_record:
-            try:
-                webhook_record.update_attempt(success=success, latency_ms=int(attempt_duration))
-                await self.db_session.commit()
-                
-                log.info(
-                    "webhook_attempt_recorded",
-                    step="webhook_service",
-                    success=success,
-                    attempts=webhook_record.attempts,
-                    latency_ms=round(attempt_duration, 2),
-                    status=webhook_record.status
-                )
-            except Exception as e:
-                log.error(
-                    "webhook_attempt_update_failed",
-                    step="webhook_service",
-                    error=str(e),
-                    exc_info=True
-                )
-                # Don't fail the whole operation if recording fails
-                await self.db_session.rollback()
+        # Clear the references after use
+        self.webhook_client._db_session = None
+        self.webhook_client._webhook_id = None
+        self.webhook_client._webhook_record = None
+        
+        # Update webhook record with attempt results and commit
+        if self.db_session:
+            if webhook_record:
+                try:
+                    # Update with actual attempt count from WebhookClient
+                    webhook_record.update_attempt(success=success, latency_ms=int(attempt_duration), attempt_count=attempt_count)
+                    # Ensure the record is still in the session
+                    if webhook_record not in self.db_session:
+                        self.db_session.add(webhook_record)
+                    await self.db_session.commit()
+                    
+                    log.info(
+                        "webhook_attempt_recorded",
+                        step="webhook_service",
+                        success=success,
+                        attempts=webhook_record.attempts,
+                        latency_ms=round(attempt_duration, 2),
+                        status=webhook_record.status,
+                        webhook_id=webhook_record.id
+                    )
+                except Exception as e:
+                    log.error(
+                        "webhook_attempt_update_failed",
+                        step="webhook_service",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True
+                    )
+                    # Don't fail the whole operation if recording fails
+                    try:
+                        await self.db_session.rollback()
+                    except Exception as rollback_error:
+                        log.error(
+                            "webhook_rollback_failed",
+                            step="webhook_service",
+                            error=str(rollback_error),
+                            exc_info=True
+                        )
+            else:
+                # If webhook_record is None, try to create it now (fallback)
+                try:
+                    params = "?mode=fail" if os.getenv("LEDGER_MODE_FAIL", "") == "fail" else ""
+                    webhook_id = str(uuid4())
+                    webhook_record = OutboundWebhookModel.create(
+                        webhook_id=webhook_id,
+                        event_type="BNPL_APPROVED",
+                        payload=payload,
+                        target_url=f"{self.target_url}/mock-ledger{params}"
+                    )
+                    # Update with actual attempt count from WebhookClient
+                    webhook_record.update_attempt(success=success, latency_ms=int(attempt_duration), attempt_count=attempt_count)
+                    self.db_session.add(webhook_record)
+                    await self.db_session.commit()
+                    
+                    log.info(
+                        "webhook_record_created_and_recorded",
+                        step="webhook_service",
+                        webhook_id=webhook_id,
+                        success=success,
+                        attempts=webhook_record.attempts
+                    )
+                except Exception as e:
+                    log.error(
+                        "webhook_fallback_record_failed",
+                        step="webhook_service",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True
+                    )
+                    try:
+                        await self.db_session.rollback()
+                    except Exception:
+                        pass
         
         return success
 

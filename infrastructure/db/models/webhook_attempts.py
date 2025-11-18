@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from infrastructure.db.models.base import Base
 
@@ -19,9 +19,6 @@ class OutboundWebhookModel(Base):
     attempts: int = Column(Integer, nullable=False, default=0)  # Attempt counter
     created_at: datetime = Column(DateTime(timezone=True), nullable=False)
     
-    # Optional: Foreign key to plan for reference
-    plan_id: Optional[str] = Column(UUID(as_uuid=False), ForeignKey("bnpl_plan.id"), nullable=True)
-    
     @classmethod
     def create(
         cls,
@@ -29,7 +26,6 @@ class OutboundWebhookModel(Base):
         event_type: str,
         payload: Dict[str, Any],
         target_url: str,
-        plan_id: Optional[str] = None
     ) -> "OutboundWebhookModel":
         """Create a new outbound webhook record."""
         return cls(
@@ -41,12 +37,20 @@ class OutboundWebhookModel(Base):
             attempts=0,
             last_attempt_at=None,
             created_at=datetime.now(),
-            plan_id=plan_id
         )
     
-    def update_attempt(self, success: bool, latency_ms: Optional[int] = None):
-        """Update webhook record after an attempt."""
-        self.attempts += 1
+    def update_attempt(self, success: bool, latency_ms: Optional[int] = None, attempt_count: Optional[int] = None):
+        """Update webhook record after an attempt.
+        
+        Args:
+            success: Whether the attempt was successful
+            latency_ms: Optional latency in milliseconds
+            attempt_count: Optional total attempt count (if not provided, increments by 1)
+        """
+        if attempt_count is not None:
+            self.attempts = attempt_count
+        else:
+            self.attempts += 1
         self.last_attempt_at = datetime.now()
         self.status = "success" if success else "failed"
 
