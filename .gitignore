@@ -1,8 +1,16 @@
 venv/
 __pycache__/
+.vscode/
+.terraform/
+.terraform.lock.hcl
+terraform/terraform.tfvars
 .pytest_cache/
 .mypy_cache/
 .cursor/
 .cursor/rules/
 .cursor/rules/codebase.mdc
 .cursor/rules/codebase.mdc
+.env
+*.env
+!.env.example
+ddagent-install.log

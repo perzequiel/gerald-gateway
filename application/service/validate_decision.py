@@ -1,10 +1,24 @@
+import os
 import time
 from typing import Optional
 from domain.entities import Decision, Plan
 from domain.interfaces import TransactionRepository, DecisionRepository, PlanRepository, WebhookPort
 from domain.services import RiskCalculationService
 from infrastructure.logging.structlog_logs import logger
-from infrastructure.metrics.metrics import gerald_decision_total, gerald_credit_limit_bucket
+from infrastructure.metrics.metrics import (
+    gerald_decision_total, 
+    gerald_credit_limit_bucket,
+    service_errors,
+    service_requests,
+    gerald_approved,
+    gerald_declined
+)
+from infrastructure.metrics.datadog_adapter import (
+    increment_service_errors,
+    increment_service_requests,
+    increment_gerald_approved,
+    increment_gerald_declined
+)
 
 class ValidateDecisionService:
     def __init__(
@@ -127,6 +141,7 @@ class ValidateDecisionService:
                 )
             
             # Emit metrics once at the end (avoid double counting)
+            # Métricas principales
             if 'error' in risk_score:
                 gerald_decision_total.labels(outcome="error").inc()
             elif approved:
@@ -136,6 +151,32 @@ class ValidateDecisionService:
             
             # Emit credit limit bucket metric (only once)
             gerald_credit_limit_bucket.labels(bucket=limit_bucket).inc()
+            
+            # Métricas adicionales para compatibilidad con Terraform
+            # Estas se incrementan en Prometheus Y se envían a Datadog usando DogStatsD
+            service_name = os.getenv("SERVICE_NAME", "gerald-gateway")
+            
+            # Para error_rate monitor: service.{service_name}.errors y service.{service_name}.requests
+            # Incrementar en Prometheus (para que aparezcan en /metrics)
+            service_requests.labels(service_name=service_name).inc()
+            if 'error' in risk_score:
+                service_errors.labels(service_name=service_name).inc()
+            
+            # Para approval_rate_drop monitor: gerald.approved y gerald.declined
+            # Incrementar en Prometheus (para que aparezcan en /metrics)
+            if approved:
+                gerald_approved.inc()
+            else:
+                gerald_declined.inc()
+            
+            # También enviar a DogStatsD (para que aparezcan con los nombres exactos en Datadog)
+            increment_service_requests(service_name=service_name)
+            if 'error' in risk_score:
+                increment_service_errors(service_name=service_name)
+            if approved:
+                increment_gerald_approved()
+            else:
+                increment_gerald_declined()
             
             # Save decision to database FIRST (before plan, since plan has FK to decision)
             if self.decision_repo:

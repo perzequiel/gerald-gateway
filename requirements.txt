@@ -8,3 +8,5 @@ greenlet==3.2.4
 pydantic==2.12.4
 structlog==25.5.0
 tenacity==9.0.0
+datadog==0.47.0
+datadog-api-client==2.25.0

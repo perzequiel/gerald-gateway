@@ -1,0 +1,265 @@
+{
+  "title": "Gerald BNPL Gateway - 7-Day Overview",
+  "description": "Dashboard showing approval-rate, outcomes, limit buckets, webhook latency, and upstream failures",
+  "widgets": [
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Approved Decisions (1h)",
+        "requests": [
+          {
+            "q": "sum:gerald_gateway.gerald_decision_total{outcome:approved}",
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "label": "Rate",
+          "min": "0",
+          "max": "1"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 47,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Decision Outcomes",
+        "requests": [
+          {
+            "q": "sum:gerald_gateway.gerald_decision_total{outcome:approved}",
+            "display_type": "bars",
+            "style": {
+              "palette": "green"
+            }
+          },
+          {
+            "q": "sum:gerald_gateway.gerald_decision_total{outcome:declined}",
+            "display_type": "bars",
+            "style": {
+              "palette": "red"
+            }
+          },
+          {
+            "q": "sum:gerald_gateway.gerald_decision_total{outcome:error}",
+            "display_type": "bars",
+            "style": {
+              "palette": "orange"
+            }
+          }
+        ],
+        "yaxis": {
+          "label": "Decisions/sec"
+        }
+      },
+      "layout": {
+        "x": 47,
+        "y": 0,
+        "width": 47,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Credit Limit Buckets Distribution",
+        "requests": [
+          {
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$0\"}",
+            "display_type": "bars",
+            "style": {
+              "palette": "red"
+            }
+          },
+          {
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$100-$400\"}",
+            "display_type": "bars",
+            "style": {
+              "palette": "yellow"
+            }
+          },
+          {
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$400-$1000\"}",
+            "display_type": "bars",
+            "style": {
+              "palette": "blue"
+            }
+          },
+          {
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$1000+\"}",
+            "display_type": "bars",
+            "style": {
+              "palette": "green"
+            }
+          }
+        ],
+        "yaxis": {
+          "label": "Count/sec"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 15,
+        "width": 47,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Webhook Latency (p50, p95, p99)",
+        "requests": [
+          {
+            "q": "avg:gerald_gateway.webhook_latency_seconds{*}",
+            "display_type": "line",
+            "style": {
+              "palette": "blue"
+            }
+          },
+          {
+            "q": "max:gerald_gateway.webhook_latency_seconds{*}",
+            "display_type": "line",
+            "style": {
+              "palette": "red"
+            }
+          }
+        ],
+        "yaxis": {
+          "label": "Seconds"
+        }
+      },
+      "layout": {
+        "x": 47,
+        "y": 15,
+        "width": 47,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Bank Fetch Failures",
+        "requests": [
+          {
+            "q": "sum:gerald_gateway.bank_fetch_failures_total{*}",
+            "display_type": "bars",
+            "style": {
+              "palette": "red"
+            }
+          }
+        ],
+        "yaxis": {
+          "label": "Failures/sec"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 30,
+        "width": 47,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Current Approved Decisions (1h)",
+        "requests": [
+          {
+            "q": "sum:gerald_gateway.gerald_decision_total{outcome:approved}",
+            "aggregator": "last"
+          }
+        ],
+        "precision": 2
+      },
+      "layout": {
+        "x": 47,
+        "y": 30,
+        "width": 23,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Total Decisions (7d)",
+        "requests": [
+          {
+            "q": "sum:gerald_gateway.gerald_decision_total{*}",
+            "aggregator": "sum"
+          }
+        ],
+        "precision": 0
+      },
+      "layout": {
+        "x": 70,
+        "y": 30,
+        "width": 24,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Service Service Errors (for Terraform monitors)",
+        "requests": [
+          {
+            "q": "sum:terraform.service_errors_total{service_name:gerald-gateway}",
+            "display_type": "line",
+            "style": {
+              "palette": "red"
+            }
+          }
+        ],
+        "yaxis": {
+          "label": "Error Rate %"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 45,
+        "width": 47,
+        "height": 15
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Approval Rate (using gerald_approved/declined)",
+        "requests": [
+          {
+            "q": "sum:terraform.gerald_approved_total{*}",
+            "display_type": "line",
+            "style": {
+              "palette": "green"
+            }
+          }
+        ],
+        "yaxis": {
+          "label": "Approval Rate %"
+        }
+      },
+      "layout": {
+        "x": 47,
+        "y": 45,
+        "width": 47,
+        "height": 15
+      }
+    }
+  ],
+  "template_variables": [
+    {
+      "name": "environment",
+      "prefix": "env",
+      "available_values": [
+        "production",
+        "staging",
+        "development"
+      ]
+    }
+  ],
+  "layout_type": "free"
+}
