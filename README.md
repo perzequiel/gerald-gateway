@@ -34,27 +34,21 @@ pip install -r requirements.txt
 python -m pytest
 ```
 
-5) Run Datadog Agent
+5) Copy env (create apikey and app key in Datadog)
+```bash
+cp .env.example .env
+```
+
+6) Run Datadog Agent 
 ```bash
 docker compose up -d
 ## to restart the agent (apply changes)
 docker restart dd-agent
 ```
 
-6) Run Terraform monitors
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# use datadog keys (secrets)
-# datadog_api_key = "your-datadog-api-key-here"
-# datadog_app_key = "your-datadog-app-key-here"
-terraform init
-terraform plan
-```
-
 7) Run Server
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8080
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
 8) Build Datadog Dashboard

@@ -18,9 +18,7 @@ from infrastructure.clients.bank_client import BankClient
 from infrastructure.clients.webhook_client import WebhookClient
 from domain.exceptions import BankAPIError
 from infrastructure.metrics.metrics import (
-    bank_fetch_failures_total,
-    webhook_latency_seconds,
-    gerald_decision_total
+    bank_fetch_failures_total
 )
 
 

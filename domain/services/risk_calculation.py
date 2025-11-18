@@ -66,7 +66,7 @@ class RiskCalculationService:
         self.income_spend_weight = income_spend_weight
         # this is the weight for the NSF score, if the NSF score is greater than 0, the score is increased by this value
         self.nsf_weight = nsf_weight
-        # maximum amount for the limit bucket $1000+
+        # maximum amount for the limit bucket 1000
         self.max_amount_for_limit_bucket = max_amount_for_limit_bucket
 
     # private method
@@ -196,16 +196,16 @@ class RiskCalculationService:
 
         # --- bucket mapping (simple example) ---
         if final_score < 20:
-            limit_bucket = "$0"
+            limit_bucket = "0"
             limit_amount = 0
         elif final_score < 40:
-            limit_bucket = "$100 - $400"
+            limit_bucket = "100-400"
             limit_amount = 400
         elif final_score < 70:
-            limit_bucket = "$500"
+            limit_bucket = "500"
             limit_amount = 500
         else:
-            limit_bucket = "$1000+"
+            limit_bucket = "1000"
             limit_amount = self.max_amount_for_limit_bucket
         # reasons breakdown
         reasons = []

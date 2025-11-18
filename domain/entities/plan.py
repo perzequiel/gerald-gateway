@@ -17,7 +17,7 @@ class Plan:
     days_between_installments: int = 14
 
     @staticmethod
-    def create(decision_id: str, user_id: str, total_cents: int, installments_count: int = 4, days_between_installments: int = 14) -> 'Plan':
+    def create(decision_id: str, user_id: str, total_cents: int, installments_count: int = 4, days_between_installments: int = 14, interest_percentage: float = 0.05) -> 'Plan':
         plan = Plan(id=str(uuid4()), 
             decision_id=decision_id, 
             user_id=user_id,
@@ -27,11 +27,14 @@ class Plan:
             days_between_installments=days_between_installments
         )
 
+        # percentage to add interest to the total_cents
+        total_cents_with_interest = int(total_cents * (1 + interest_percentage))
+
         installments = []
         # Calculate base amount per installment (integer division)
-        base_amount = total_cents // installments_count
+        base_amount = total_cents_with_interest // installments_count
         # Last installment absorbs any remainder (≤ 1 cent)
-        remainder = total_cents % installments_count
+        remainder = total_cents_with_interest % installments_count
         
         for i in range(1, installments_count + 1):
             due_date = plan.created_at + timedelta(days=i * days_between_installments)

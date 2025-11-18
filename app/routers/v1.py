@@ -7,6 +7,7 @@ from infrastructure.clients import TransactionRepoAPI, BankClient, WebhookClient
 from infrastructure.db.database import get_db_session
 from infrastructure.db.repositories.decision_repo_sqlalchemy import DecisionRepoSqlalchemy
 from infrastructure.db.repositories.plan_repo_sqlalchemy import PlanRepoSqlalchemy
+from infrastructure.metrics.metrics_adapter import MetricsAdapter
 from app.schemas.desicion_schema import DecisionCreate, DecisionResponse, PlanResponse, InstallmentResponse
 from application.service.validate_decision import ValidateDecisionService
 from domain.exceptions import BankAPIError
@@ -54,7 +55,7 @@ async def decision(
         
         # Check if decision already exists for this request_id (idempotency)
         if request_id:
-            existing_decision = await decision_repo.get_decision_by_request_id(request_id)
+            existing_decision = await decision_repo.get_decision_by_request_id(request_id) # TODO should be by request_id, not id
             if existing_decision:
                 # Load plan if it exists
                 plan_id = None
@@ -88,12 +89,16 @@ async def decision(
             target_url=ledger_url
         )
         
-        # Initialize service with all repositories and webhook
+        # Create metrics adapter
+        metrics_adapter = MetricsAdapter()
+        
+        # Initialize service with all repositories, webhook, and metrics
         srv = ValidateDecisionService(
             transaction_repo=transaction_repo,
             decision_repo=decision_repo,
             plan_repo=plan_repo,
-            webhook_port=webhook_service
+            webhook_port=webhook_service,
+            metrics_port=metrics_adapter
         )
         
         decision = await srv.execute(

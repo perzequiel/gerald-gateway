@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from domain.entities import Decision
 from domain.interfaces import DecisionRepository
-from infrastructure.db.models.desicions import DecisionModel
+from infrastructure.db.models.decisions import DecisionModel
 
 
 class DecisionRepoSqlalchemy(DecisionRepository):

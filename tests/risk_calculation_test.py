@@ -12,7 +12,7 @@ class TestRiskCalculationService:
         assert risk_score["component_scores"]["income_spend_score"] == 100.0
         assert risk_score["component_scores"]["nsf_score"] == 100.0
         assert risk_score["final_score"] == 100.0
-        assert risk_score["limit_bucket"] == "$1000+"
+        assert risk_score["limit_bucket"] == "1000"
 
     def test_risk_calculation_service_calculate_risk_with_transactions_good_case(self):
         risk_calculation_service = RiskCalculationService()
@@ -33,13 +33,13 @@ class TestRiskCalculationService:
             nsf=nsf
         ) for i, (date, amount, type, description, category, merchant, balance, nsf) in enumerate[tuple[datetime, int, str, str, str, str, int, bool]](tuple_transactions)]
         risk_score = risk_calculation_service.calculate_risk(transactions)
-        # {'avg_daily_balance_cents': 1000, 'component_scores': {'balance_score': 100.0, 'income_spend_score': 50.0, 'nsf_score': 100.0}, 'final_score': 85.0, 'limit_bucket': '$1000+', ...}
+        # {'avg_daily_balance_cents': 1000, 'component_scores': {'balance_score': 100.0, 'income_spend_score': 50.0, 'nsf_score': 100.0}, 'final_score': 85.0, 'limit_bucket': '1000', ...}
         assert risk_score["avg_daily_balance_cents"] == 1000
         assert risk_score["component_scores"]["balance_score"] == 100.0
         assert risk_score["component_scores"]["income_spend_score"] == 50.0
         assert risk_score["component_scores"]["nsf_score"] == 100.0
         assert risk_score["final_score"] == 85.0
-        assert risk_score["limit_bucket"] == "$1000+"
+        assert risk_score["limit_bucket"] == "1000"
 
     def test_risk_calculation_service_calculate_risk_with_transactions_bad_case(self):
         risk_calculation_service = RiskCalculationService()
@@ -67,7 +67,7 @@ class TestRiskCalculationService:
         assert risk_score["component_scores"]["balance_score"] == 100.0    
         assert risk_score["nsf_count"] > 0.0
         assert risk_score["final_score"] < 85.0
-        assert risk_score["limit_bucket"] == "$500"
+        assert risk_score["limit_bucket"] == "500"
 
     def test_risk_calculation_service_calculate_risk_with_transactions_very_bad_case(self):
         risk_calculation_service = RiskCalculationService()
@@ -93,7 +93,7 @@ class TestRiskCalculationService:
         assert risk_score["component_scores"]["income_spend_score"] == 0.0
         assert risk_score["component_scores"]["nsf_score"] == 25.0
         assert risk_score["final_score"] == 35.0
-        assert risk_score["limit_bucket"] == "$100 - $400"
+        assert risk_score["limit_bucket"] == "100-400"
 
     def test_risk_calculation_service_calculate_risk_with_transactions_worst_case(self):
         risk_calculation_service = RiskCalculationService()
@@ -126,4 +126,4 @@ class TestRiskCalculationService:
         assert risk_score["component_scores"]["income_spend_score"] == 0.0
         assert risk_score["component_scores"]["nsf_score"] == 0.0
         assert risk_score["final_score"] == 0.0
-        assert risk_score["limit_bucket"] == "$0"
+        assert risk_score["limit_bucket"] == "0"

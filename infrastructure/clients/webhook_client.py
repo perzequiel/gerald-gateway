@@ -4,6 +4,7 @@ Webhook client for sending async webhooks to ledger service.
 This client implements retries with exponential backoff using tenacity,
 records webhook attempts in the database, and observes latency metrics.
 """
+import os
 import httpx
 import time
 from typing import Optional
@@ -81,6 +82,10 @@ class WebhookClient:
         start_time = time.time()
         
         try:
+            # for testing purposes
+            LEDGER_MODE_FAIL = os.getenv("LEDGER_MODE_FAIL", "")
+            if LEDGER_MODE_FAIL=="fail":
+                url = f"{url}?mode=fail"
             response = await self._client.post(url, json=payload)
             latency = time.time() - start_time
             

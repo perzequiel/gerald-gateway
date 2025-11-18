@@ -1,24 +1,9 @@
-import os
 import time
 from typing import Optional
 from domain.entities import Decision, Plan
-from domain.interfaces import TransactionRepository, DecisionRepository, PlanRepository, WebhookPort
+from domain.interfaces import TransactionRepository, DecisionRepository, PlanRepository, WebhookPort, MetricsPort
 from domain.services import RiskCalculationService
 from infrastructure.logging.structlog_logs import logger
-from infrastructure.metrics.metrics import (
-    gerald_decision_total, 
-    gerald_credit_limit_bucket,
-    service_errors,
-    service_requests,
-    gerald_approved,
-    gerald_declined
-)
-from infrastructure.metrics.datadog_adapter import (
-    increment_service_errors,
-    increment_service_requests,
-    increment_gerald_approved,
-    increment_gerald_declined
-)
 
 class ValidateDecisionService:
     def __init__(
@@ -26,7 +11,8 @@ class ValidateDecisionService:
         transaction_repo: TransactionRepository,
         decision_repo: Optional[DecisionRepository] = None,
         plan_repo: Optional[PlanRepository] = None,
-        webhook_port: Optional[WebhookPort] = None
+        webhook_port: Optional[WebhookPort] = None,
+        metrics_port: Optional[MetricsPort] = None
     ):
         """
         Initialize the decision validation service.
@@ -36,11 +22,13 @@ class ValidateDecisionService:
             decision_repo: Repository for saving decisions (optional)
             plan_repo: Repository for saving plans (optional)
             webhook_port: Webhook port for sending webhooks to ledger (optional)
+            metrics_port: Metrics port for emitting metrics (optional)
         """
         self.transaction_repo = transaction_repo
         self.decision_repo = decision_repo
         self.plan_repo = plan_repo
-        self.webhook_port = webhook_port 
+        self.webhook_port = webhook_port
+        self.metrics_port = metrics_port 
     
     async def execute(self, user_id: str, amount_requested_cents: int, request_id: str = None) -> Decision:
         """
@@ -91,11 +79,11 @@ class ValidateDecisionService:
                 )
                 approved = False
                 score = 0.0
-                limit_bucket = "$0"
+                limit_bucket = "0"
             else:
-                approved = amount_requested_cents <= risk_score['limit_amount']
+                approved = amount_requested_cents > 0 and amount_requested_cents <= risk_score['limit_amount'] # TODO : it should be amount_granted_cents
                 score = risk_score.get('final_score', 0.0)
-                limit_bucket = risk_score.get('limit_bucket', '$0')
+                limit_bucket = risk_score.get('limit_bucket', '0')
                 log.info(
                     "risk_calculated",
                     step="risk_calculation",
@@ -114,7 +102,8 @@ class ValidateDecisionService:
             decision.set_score(score)
             
             if approved:
-                amount_granted_cents = min(amount_requested_cents, risk_score['limit_amount'])
+                amount_granted_cents = min(amount_requested_cents, risk_score['limit_amount']) # TODO : it should be amount_granted_cents NO PUEDE SER MENOR
+                # TODO : send installments_count and days_between_installments to the plan creation
                 plan = Plan.create(decision_id=decision.id, user_id=user_id, total_cents=amount_granted_cents)
                 decision.set_plan(plan=plan)
                 decision.set_approved(approved=approved)
@@ -131,7 +120,7 @@ class ValidateDecisionService:
                     credit_limit_cents=decision.credit_limit_cents
                 )
             else:
-                decision.set_approved(approved=False)
+                # decision.set_approved(approved=False) # TODO se crea en False por defecto
                 log.info(
                     "decision_declined",
                     step="decision_creation",
@@ -141,42 +130,18 @@ class ValidateDecisionService:
                 )
             
             # Emit metrics once at the end (avoid double counting)
-            # Métricas principales
-            if 'error' in risk_score:
-                gerald_decision_total.labels(outcome="error").inc()
-            elif approved:
-                gerald_decision_total.labels(outcome="approved").inc()
-            else:
-                gerald_decision_total.labels(outcome="declined").inc()
-            
-            # Emit credit limit bucket metric (only once)
-            gerald_credit_limit_bucket.labels(bucket=limit_bucket).inc()
-            
-            # Métricas adicionales para compatibilidad con Terraform
-            # Estas se incrementan en Prometheus Y se envían a Datadog usando DogStatsD
-            service_name = os.getenv("SERVICE_NAME", "gerald-gateway")
-            
-            # Para error_rate monitor: service.{service_name}.errors y service.{service_name}.requests
-            # Incrementar en Prometheus (para que aparezcan en /metrics)
-            service_requests.labels(service_name=service_name).inc()
-            if 'error' in risk_score:
-                service_errors.labels(service_name=service_name).inc()
-            
-            # Para approval_rate_drop monitor: gerald.approved y gerald.declined
-            # Incrementar en Prometheus (para que aparezcan en /metrics)
-            if approved:
-                gerald_approved.inc()
-            else:
-                gerald_declined.inc()
-            
-            # También enviar a DogStatsD (para que aparezcan con los nombres exactos en Datadog)
-            increment_service_requests(service_name=service_name)
-            if 'error' in risk_score:
-                increment_service_errors(service_name=service_name)
-            if approved:
-                increment_gerald_approved()
-            else:
-                increment_gerald_declined()
+            if self.metrics_port:
+                # Metrics
+                if 'error' in risk_score:
+                    self.metrics_port.increment_decision_total(outcome="error")
+                elif approved:
+                    self.metrics_port.increment_decision_total(outcome="approved")
+                else:
+                    self.metrics_port.increment_decision_total(outcome="declined")
+                
+                # Emit credit limit bucket metric
+                self.metrics_port.increment_credit_limit_bucket(bucket=limit_bucket)
+
             
             # Save decision to database FIRST (before plan, since plan has FK to decision)
             if self.decision_repo:

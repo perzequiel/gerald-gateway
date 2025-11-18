@@ -69,28 +69,28 @@
         "title": "Credit Limit Buckets Distribution",
         "requests": [
           {
-            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$0\"}",
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:0}",
             "display_type": "bars",
             "style": {
               "palette": "red"
             }
           },
           {
-            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$100-$400\"}",
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:100-400}",
             "display_type": "bars",
             "style": {
               "palette": "yellow"
             }
           },
           {
-            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$400-$1000\"}",
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:400-1000}",
             "display_type": "bars",
             "style": {
               "palette": "blue"
             }
           },
           {
-            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:\"$1000+\"}",
+            "q": "sum:gerald_gateway.gerald_credit_limit_bucket_total{bucket:1000}",
             "display_type": "bars",
             "style": {
               "palette": "green"
@@ -198,30 +198,6 @@
         "x": 70,
         "y": 30,
         "width": 24,
-        "height": 15
-      }
-    },
-    {
-      "definition": {
-        "type": "timeseries",
-        "title": "Service Service Errors (for Terraform monitors)",
-        "requests": [
-          {
-            "q": "sum:terraform.service_errors_total{service_name:gerald-gateway}",
-            "display_type": "line",
-            "style": {
-              "palette": "red"
-            }
-          }
-        ],
-        "yaxis": {
-          "label": "Error Rate %"
-        }
-      },
-      "layout": {
-        "x": 0,
-        "y": 45,
-        "width": 47,
         "height": 15
       }
     },

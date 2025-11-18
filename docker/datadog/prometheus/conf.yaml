@@ -6,17 +6,6 @@ instances:
     namespace: "gerald_gateway"
     metrics:
       - "gerald_decision_total"
-      - "gerald_credit_limit_bucket"
+      - "gerald_credit_limit_bucket_total"
       - "bank_fetch_failures_total"
       - "webhook_latency_seconds"
-  
-  # Instancia adicional: métricas con namespace "terraform" para compatibilidad con Terraform
-  # Datadog requiere que todas las instancias tengan namespace definido
-  # Las métricas aparecerán como terraform.service_errors, terraform.gerald_approved, etc.
-  - prometheus_url: "http://host.docker.internal:8080/metrics"
-    namespace: "terraform"  # Namespace requerido por Datadog
-    metrics:
-      - "service_errors"
-      - "service_requests"
-      - "gerald_approved"
-      - "gerald_declined"

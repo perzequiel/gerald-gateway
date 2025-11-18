@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 from uuid import uuid4
-from .user import User
 from .plan import Plan
 
 @dataclass

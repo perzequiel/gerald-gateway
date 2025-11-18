@@ -13,7 +13,7 @@ This module calculates a simple *risk score* and maps it to *limit buckets* from
 3. Sums **income vs expenses** and monthlyizes them according to the analysis window.
 4. Counts **NSF / overdraft events** (flag `nsf` or post-debit with `balance_cents < 0`).
 5. Generates three components (balance, income/spend, nsf), weights them, and produces a `final_score` in 0–100.
-6. Maps the `final_score` to a `limit_bucket` and `limit_amount` (e.g., `$0`, `$100-$400`, `$500`, `$1000+`).
+6. Maps the `final_score` to a `limit_bucket` and `limit_amount` (e.g., `0`, `100-400`, `500`, `1000`).
 
 ---
 
@@ -58,7 +58,7 @@ The service is located at `domain/services/risk_calculation.py`
 * `balance_neg_cap: int` — negative cap where the balance component becomes 0. Default: `10_000` (cents). Adjust to your currency and risk appetite.
 * `nsf_penalty: float` — how much each NSF event subtracts from the `nsf_score` component. Default: `25.0` (points).
 * `balance_weight`, `income_spend_weight`, `nsf_weight` — weights for the final combination. Default: `0.5`, `0.3`, `0.2`.
-* `max_amount_for_limit_bucket: int` — maximum value that represents the `$1000+` bucket. Default: `100_000` (cents).
+* `max_amount_for_limit_bucket: int` — maximum value that represents the `1000` bucket. Default: `100_000` (cents).
 
 **Rule of thumb:** try first with `balance_neg_cap` in the range of 5k–100k (depending on currency), and `nsf_penalty` between 10–40 to calibrate sensitivity.
 
@@ -108,7 +108,7 @@ print(result)
 #   "nsf_count": 0,
 #   "component_scores": {"balance_score": 100.0, "income_spend_score": 100.0, "nsf_score": 100.0},
 #   "final_score": 100.0,
-#   "limit_bucket": "$1000+",
+#   "limit_bucket": "1000",
 #   "limit_amount": 100000,
 #   "reasons": []
 # }
@@ -200,7 +200,7 @@ python -m pytest
     "nsf_score": 0.0
   },
   "final_score": 8.5,
-  "limit_bucket": "$0",
+  "limit_bucket": "0",
   "limit_amount": 0,
   "max_amount_for_limit_bucket": 100000,
   "reasons": [

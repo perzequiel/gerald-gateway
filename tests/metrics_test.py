@@ -3,7 +3,7 @@ Tests for metrics emission and validation.
 
 Tests verify:
 - gerald_decision_total is incremented with correct labels
-- gerald_credit_limit_bucket is incremented with correct buckets
+- gerald_credit_limit_bucket_total is incremented with correct buckets
 - Metrics are emitted for approved, declined, and error cases
 """
 import pytest
@@ -14,10 +14,11 @@ from prometheus_client import generate_latest, REGISTRY
 from app.main import app
 from infrastructure.metrics.metrics import (
     gerald_decision_total,
-    gerald_credit_limit_bucket,
+    gerald_credit_limit_bucket_total,
     bank_fetch_failures_total
 )
 from application.service.validate_decision import ValidateDecisionService
+from infrastructure.metrics.metrics_adapter import MetricsAdapter
 from domain.entities import Transaction
 from datetime import datetime
 import re
@@ -158,10 +159,12 @@ class TestDecisionMetrics:
         initial_metrics = generate_latest(REGISTRY).decode('utf-8')
         initial_approved_count = _extract_metric_value(initial_metrics, 'gerald_decision_total', {'outcome': 'approved'})
         
+        metrics_adapter = MetricsAdapter()
         service = ValidateDecisionService(
             transaction_repo=mock_transaction_repo_good,
             decision_repo=mock_decision_repo,
-            plan_repo=mock_plan_repo
+            plan_repo=mock_plan_repo,
+            metrics_port=metrics_adapter
         )
         
         decision = await service.execute(
@@ -188,10 +191,12 @@ class TestDecisionMetrics:
         initial_metrics = generate_latest(REGISTRY).decode('utf-8')
         initial_declined_count = _extract_metric_value(initial_metrics, 'gerald_decision_total', {'outcome': 'declined'})
         
+        metrics_adapter = MetricsAdapter()
         service = ValidateDecisionService(
             transaction_repo=mock_transaction_repo_good,
             decision_repo=mock_decision_repo,
-            plan_repo=mock_plan_repo
+            plan_repo=mock_plan_repo,
+            metrics_port=metrics_adapter
         )
         
         # Request amount higher than limit to get declined
@@ -215,12 +220,14 @@ class TestDecisionMetrics:
         
         initial_metrics = generate_latest(REGISTRY).decode('utf-8')
         initial_error_count = _extract_metric_value(initial_metrics, 'gerald_decision_total', {'outcome': 'error'})
-        initial_bucket_zero_count = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket', {'bucket': '$0'})
+        initial_bucket_zero_count = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '0'})
         
+        metrics_adapter = MetricsAdapter()
         service = ValidateDecisionService(
             transaction_repo=mock_transaction_repo_no_transactions,
             decision_repo=mock_decision_repo,
-            plan_repo=mock_plan_repo
+            plan_repo=mock_plan_repo,
+            metrics_port=metrics_adapter
         )
         
         decision = await service.execute(
@@ -233,10 +240,10 @@ class TestDecisionMetrics:
         
         final_metrics = generate_latest(REGISTRY).decode('utf-8')
         final_error_count = _extract_metric_value(final_metrics, 'gerald_decision_total', {'outcome': 'error'})
-        final_bucket_zero_count = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket', {'bucket': '$0'})
+        final_bucket_zero_count = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '0'})
         
         assert final_error_count > initial_error_count, "gerald_decision_total{outcome='error'} should be incremented"
-        assert final_bucket_zero_count > initial_bucket_zero_count, "gerald_credit_limit_bucket{bucket='$0'} should be incremented"
+        assert final_bucket_zero_count > initial_bucket_zero_count, "gerald_credit_limit_bucket_total{bucket='0'} should be incremented"
 
 
 class TestCreditLimitBucketMetrics:
@@ -245,28 +252,28 @@ class TestCreditLimitBucketMetrics:
     def test_bucket_metrics_for_different_limits(self):
         """Test that different credit limit buckets are tracked."""
         # Verify the metric structure exists
-        assert gerald_credit_limit_bucket is not None
-        assert hasattr(gerald_credit_limit_bucket, 'labels')
+        assert gerald_credit_limit_bucket_total is not None
+        assert hasattr(gerald_credit_limit_bucket_total, 'labels')
         
         # Get initial values
         initial_metrics = generate_latest(REGISTRY).decode('utf-8')
-        initial_bucket_0 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket', {'bucket': '$0'})
-        initial_bucket_100_400 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket', {'bucket': '$100 - $400'})
-        initial_bucket_500 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket', {'bucket': '$500'})
-        initial_bucket_1000 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket', {'bucket': '$1000+'})
+        initial_bucket_0 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '0'})
+        initial_bucket_100_400 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '100-400'})
+        initial_bucket_500 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '500'})
+        initial_bucket_1000 = _extract_metric_value(initial_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '1000'})
         
         # Increment different buckets
-        gerald_credit_limit_bucket.labels(bucket="$0").inc()
-        gerald_credit_limit_bucket.labels(bucket="$100 - $400").inc()
-        gerald_credit_limit_bucket.labels(bucket="$500").inc()
-        gerald_credit_limit_bucket.labels(bucket="$1000+").inc()
+        gerald_credit_limit_bucket_total.labels(bucket="0").inc()
+        gerald_credit_limit_bucket_total.labels(bucket="100-400").inc()
+        gerald_credit_limit_bucket_total.labels(bucket="500").inc()
+        gerald_credit_limit_bucket_total.labels(bucket="1000").inc()
         
         # Verify buckets were incremented
         final_metrics = generate_latest(REGISTRY).decode('utf-8')
-        final_bucket_0 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket', {'bucket': '$0'})
-        final_bucket_100_400 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket', {'bucket': '$100 - $400'})
-        final_bucket_500 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket', {'bucket': '$500'})
-        final_bucket_1000 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket', {'bucket': '$1000+'})
+        final_bucket_0 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '0'})
+        final_bucket_100_400 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '100-400'})
+        final_bucket_500 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '500'})
+        final_bucket_1000 = _extract_metric_value(final_metrics, 'gerald_credit_limit_bucket_total', {'bucket': '1000'})
         
         assert final_bucket_0 > initial_bucket_0
         assert final_bucket_100_400 > initial_bucket_100_400
@@ -323,7 +330,7 @@ class TestMetricsEndpoint:
         # Verify metrics are present in response
         content = response.text
         assert "gerald_decision_total" in content
-        assert "gerald_credit_limit_bucket" in content
+        assert "gerald_credit_limit_bucket_total" in content
         assert "bank_fetch_failures_total" in content
         assert "webhook_latency_seconds" in content
     
@@ -331,7 +338,7 @@ class TestMetricsEndpoint:
         """Test that metrics endpoint includes label information."""
         # First, increment some metrics to ensure they appear
         gerald_decision_total.labels(outcome="approved").inc()
-        gerald_credit_limit_bucket.labels(bucket="$1000+").inc()
+        gerald_credit_limit_bucket_total.labels(bucket="1000").inc()
         
         response = client.get("/metrics")
         content = response.text
