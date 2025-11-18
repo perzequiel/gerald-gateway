@@ -3,8 +3,8 @@ services:
     image: gcr.io/datadoghq/agent:7
     container_name: dd-agent
     environment:
-      - DD_API_KEY=fcbd7c891d95343fb27e59f537b1761a
-      - DD_SITE=datadoghq.com
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_SITE=${DD_SITE:-datadoghq.com}
       - DD_LOGS_ENABLED=true
       - DD_APM_ENABLED=true
       - DD_APM_NON_LOCAL_TRAFFIC=true

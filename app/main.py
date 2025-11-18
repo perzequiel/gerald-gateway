@@ -1,5 +1,10 @@
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 from infrastructure.metrics.metrics import metrics_endpoint
 from app.routers.v1 import router
 

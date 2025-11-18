@@ -10,3 +10,4 @@ structlog==25.5.0
 tenacity==9.0.0
 datadog==0.47.0
 datadog-api-client==2.25.0
+python-dotenv==1.0.0

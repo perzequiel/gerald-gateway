@@ -8,10 +8,17 @@ import os
 # This must happen before creating the engine
 from infrastructure.db.models import Base, DecisionModel, PlanModel, InstallmentModel  # noqa: F401
 
-# Database URL from environment or default
+# Database configuration from environment variables
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+DB_NAME = os.getenv("DB_NAME", "mydb")
+
+# Build DATABASE_URL from components or use DATABASE_URL if provided
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://root:root@localhost:5432/gerald"
+    f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
 # Create async engine

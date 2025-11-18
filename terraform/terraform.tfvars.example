@@ -4,24 +4,5 @@
 datadog_api_key = "your-datadog-api-key-here"
 datadog_app_key = "your-datadog-app-key-here"
 
+# Service name (optional, defaults to "gerald-gateway" if not provided)
 service_name = "gerald-gateway"
-environment  = "production"
-
-# Notification channels (SNS topics, email addresses, etc.)
-# Format: "@channel-name" or "sns-topic-arn:arn:aws:sns:..."
-notification_channels = [
-  # "@slack-alerts",
-  # "sns-topic-arn:arn:aws:sns:us-east-1:123456789012:alerts",
-  # "@user@example.com"
-]
-
-# PagerDuty integration key (optional)
-# Get this from your PagerDuty integration settings
-pagerduty_integration_key = ""
-
-# Thresholds
-error_rate_threshold        = 2.0
-approval_rate_drop_threshold = 20.0
-evaluation_period          = 5
-baseline_period            = 24
-
