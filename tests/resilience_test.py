@@ -191,7 +191,7 @@ class TestLedgerWebhookFailure:
             )
             
             # Should eventually succeed after retries
-            assert result is True
+            assert result[0] is True
             # Should have attempted at least 3 times (1 initial + 2 retries)
             assert attempt_count >= 3
     
@@ -221,7 +221,7 @@ class TestLedgerWebhookFailure:
             )
             
             # Should return False after all retries exhausted
-            assert result is False
+            assert result[0] is False
     
     @pytest.mark.asyncio
     async def test_webhook_latency_recorded(self, reset_metrics):
@@ -246,7 +246,7 @@ class TestLedgerWebhookFailure:
             )
             
             # Verify webhook succeeded
-            assert result is True
+            assert result[0] is True
             # Note: Histogram observation happens internally in _send_with_retry
             # In a real test environment, you'd verify the histogram buckets
 

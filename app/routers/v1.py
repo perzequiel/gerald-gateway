@@ -123,7 +123,12 @@ async def decision_history(user_id: str, db: AsyncSession = Depends(get_db_sessi
     decision_repo = DecisionRepoSqlalchemy(db)
     srv = DecisionHistoryService(decision_repo)
     decisions = await srv.execute(user_id)
-    return decisions
+    return [DecisionResponse(
+        approved=decision.approved,
+        credit_limit_cents=decision.credit_limit_cents,
+        amount_granted_cents=decision.amount_granted_cents,
+        plan_id=decision.plan.id if decision.plan else ""
+    ) for decision in decisions]
 
 @router.get("/plan/{plan_id}")
 async def plan(plan_id: str, db: AsyncSession = Depends(get_db_session)) -> PlanResponse:
