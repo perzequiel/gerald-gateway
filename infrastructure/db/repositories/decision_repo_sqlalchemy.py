@@ -87,7 +87,6 @@ class DecisionRepoSqlalchemy(DecisionRepository):
                 result = await self.db.execute(stmt)
                 plan_model = result.scalar_one_or_none()
                 decision_response.set_plan(plan_model.to_domain() if plan_model else None)
-            print(f"plan_dom: {decision_response}")
             decision_responses.append(decision_response)
         return decision_responses
 
