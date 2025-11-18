@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from domain.entities import Decision
 from domain.interfaces import DecisionRepository
-from infrastructure.db.models.decisions import DecisionModel
+from infrastructure.db.models import DecisionModel, PlanModel
 
 
 class DecisionRepoSqlalchemy(DecisionRepository):
@@ -35,7 +35,15 @@ class DecisionRepoSqlalchemy(DecisionRepository):
         )
         result = await self.db.execute(stmt)
         decision_model = result.scalar_one_or_none()
-        return decision_model.to_domain() if decision_model else None
+        decision_response: Decision = decision_model.to_domain() if decision_model else None
+        # si existe que intente traer el plan si esta aprobada la desicion
+        if decision_model and decision_model.approved:
+            stmt = select(PlanModel).where(PlanModel.decision_id == decision_model.id)
+            result = await self.db.execute(stmt)
+            plan_model = result.scalar_one_or_none()
+            decision_response.set_plan(plan_model.to_domain() if plan_model else None)
+
+        return decision_response
     
     async def save_decision(self, decision: Decision, risk_score: Optional[dict] = None, request_id: Optional[str] = None) -> Decision:
         """

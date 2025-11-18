@@ -1,9 +1,8 @@
 import time
 from typing import Optional
 from domain.entities import Decision, Plan
-from domain.interfaces import TransactionRepository, DecisionRepository, PlanRepository, WebhookPort, MetricsPort
+from domain.interfaces import TransactionRepository, DecisionRepository, PlanRepository, WebhookPort, MetricsPort, LoggingPort
 from domain.services import RiskCalculationService
-from infrastructure.logging.structlog_logs import logger
 
 class ValidateDecisionService:
     def __init__(
@@ -12,7 +11,8 @@ class ValidateDecisionService:
         decision_repo: Optional[DecisionRepository] = None,
         plan_repo: Optional[PlanRepository] = None,
         webhook_port: Optional[WebhookPort] = None,
-        metrics_port: Optional[MetricsPort] = None
+        metrics_port: Optional[MetricsPort] = None,
+        logging_port: Optional[LoggingPort] = None
     ):
         """
         Initialize the decision validation service.
@@ -23,12 +23,14 @@ class ValidateDecisionService:
             plan_repo: Repository for saving plans (optional)
             webhook_port: Webhook port for sending webhooks to ledger (optional)
             metrics_port: Metrics port for emitting metrics (optional)
+            logging_port: Logging port for structured logging (optional)
         """
         self.transaction_repo = transaction_repo
         self.decision_repo = decision_repo
         self.plan_repo = plan_repo
         self.webhook_port = webhook_port
-        self.metrics_port = metrics_port 
+        self.metrics_port = metrics_port
+        self.logging_port = logging_port 
     
     async def execute(self, user_id: str, amount_requested_cents: int, request_id: str = None) -> Decision:
         """
@@ -43,11 +45,20 @@ class ValidateDecisionService:
         start_time = time.time()
         
         # Bind request_id and user_id to the logger to appear in all logs
-        log = logger.bind(
-            request_id=request_id or "unknown",
-            user_id=user_id,
-            step="decision_validation"
-        )
+        if self.logging_port:
+            log = self.logging_port.bind(
+                request_id=request_id or "unknown",
+                user_id=user_id,
+                step="decision_validation"
+            )
+        else:
+            # Fallback: create a no-op logger if logging_port is not provided
+            # This should not happen in production, but allows tests to work without logging
+            class NoOpLogger:
+                def info(self, event: str, **kwargs): pass
+                def warning(self, event: str, **kwargs): pass
+                def error(self, event: str, exc_info: bool = False, **kwargs): pass
+            log = NoOpLogger()
         
         log.info("decision_validation_started", amount_requested_cents=amount_requested_cents)
         
@@ -120,7 +131,7 @@ class ValidateDecisionService:
                     credit_limit_cents=decision.credit_limit_cents
                 )
             else:
-                # decision.set_approved(approved=False) # TODO se crea en False por defecto
+                # decision.set_approved(approved=False) # TODO default is False
                 log.info(
                     "decision_declined",
                     step="decision_creation",

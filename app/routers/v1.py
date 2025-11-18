@@ -8,6 +8,7 @@ from infrastructure.db.database import get_db_session
 from infrastructure.db.repositories.decision_repo_sqlalchemy import DecisionRepoSqlalchemy
 from infrastructure.db.repositories.plan_repo_sqlalchemy import PlanRepoSqlalchemy
 from infrastructure.metrics.metrics_adapter import MetricsAdapter
+from infrastructure.logging.logging_adapter import LoggingAdapter
 from app.schemas.desicion_schema import DecisionCreate, DecisionResponse, PlanResponse, InstallmentResponse
 from application.service.validate_decision import ValidateDecisionService
 from domain.exceptions import BankAPIError
@@ -55,19 +56,9 @@ async def decision(
         
         # Check if decision already exists for this request_id (idempotency)
         if request_id:
-            existing_decision = await decision_repo.get_decision_by_request_id(request_id) # TODO should be by request_id, not id
+            existing_decision = await decision_repo.get_decision_by_request_id(request_id) # TODO should be by request_id
             if existing_decision:
-                # Load plan if it exists
-                plan_id = None
-                if existing_decision.approved:
-                    # Get plan by decision_id
-                    from infrastructure.db.models.plans import PlanModel
-                    from sqlalchemy import select
-                    stmt = select(PlanModel).where(PlanModel.decision_id == existing_decision.id)
-                    result = await db.execute(stmt)
-                    plan_model = result.scalar_one_or_none()
-                    plan_id = plan_model.id if plan_model else None
-                
+                plan_id = existing_decision.plan.id if existing_decision.plan else None
                 # Return existing decision (idempotent response)
                 return DecisionResponse(
                     approved=existing_decision.approved,
@@ -92,13 +83,17 @@ async def decision(
         # Create metrics adapter
         metrics_adapter = MetricsAdapter()
         
-        # Initialize service with all repositories, webhook, and metrics
+        # Create logging adapter
+        logging_adapter = LoggingAdapter()
+        
+        # Initialize service with all repositories, webhook, metrics, and logging
         srv = ValidateDecisionService(
             transaction_repo=transaction_repo,
             decision_repo=decision_repo,
             plan_repo=plan_repo,
             webhook_port=webhook_service,
-            metrics_port=metrics_adapter
+            metrics_port=metrics_adapter,
+            logging_port=logging_adapter
         )
         
         decision = await srv.execute(
