@@ -155,7 +155,7 @@ class TestUseCases:
         assert decision.plan.installments[0].id is not None
         assert decision.plan.installments[0].plan_id == decision.plan.id
         assert decision.plan.installments[0].due_date is not None
-        # TODO: 5% interest rate should be sent to the plan creation
+        # TODO: 0% interest for BNPL should be sent to the plan creation
         assert decision.plan.installments[0].amount_cents == 125
         assert decision.plan.installments[0].status == InstallmentStatus.PENDING.value
         # 4 bi-weekly created at
