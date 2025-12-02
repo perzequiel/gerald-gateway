@@ -1,11 +1,25 @@
 # src/infra/db/models/user_model.py
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, date
+from typing import Optional, Any
 from sqlalchemy import Column, String, Boolean, Table, Integer, Float, DateTime
 from sqlalchemy.orm import Mapped
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from domain.entities.decision import Decision
 from infrastructure.db.models.base import Base
+
+
+def make_json_serializable(obj: Any) -> Any:
+    """Recursively convert non-serializable objects (date, datetime) to strings."""
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, date):
+        return obj.isoformat()
+    return obj
+
 
 class DecisionModel(Base):
     __tablename__ = "bnpl_decision"
@@ -46,6 +60,9 @@ class DecisionModel(Base):
         risk_factors = risk_score.copy() if risk_score else {}
         if request_id:
             risk_factors['_request_id'] = request_id  # Prefix with _ to avoid conflicts
+        
+        # Ensure all values are JSON-serializable (convert date/datetime to ISO strings)
+        risk_factors = make_json_serializable(risk_factors)
         
         return cls(
             id=decision.id,
