@@ -7,6 +7,8 @@ Main service for BNPL risk scoring. Integrates multiple signals:
 - Utilization (Gaussian scoring)
 - Payback capacity
 - Cooldown period enforcement
+
+All configuration is loaded from environment variables. See .env.example for details.
 """
 from typing import TypedDict, Optional
 
@@ -15,6 +17,7 @@ from .basics_features import BasicsFeatures, MonthlyIncomeVsSpend
 from .internal_transactions import InternalTransaction
 from .payback_capacity import compute_payback_capacity, PaybackCapacityResult
 from .cooldown import compute_cooldown, CooldownResult
+from domain.config import get_bnpl_config, get_risk_config, get_cooldown_config
 
 
 class ComponentScores(TypedDict):
@@ -24,12 +27,29 @@ class ComponentScores(TypedDict):
 
 
 class BNPLTier:
-    """BNPL limit tiers with realistic amounts"""
-    TIER_A = ("Tier A", 20000)   # Up to $200
-    TIER_B = ("Tier B", 12000)   # Up to $120
-    TIER_C = ("Tier C", 6000)    # Up to $60
-    TIER_D = ("Tier D", 2000)    # Trial - up to $20
-    DENY = ("Deny", 0)           # Denied
+    """BNPL limit tiers - values loaded from environment variables."""
+    
+    @classmethod
+    def get_tiers(cls):
+        """Get tier configuration from environment."""
+        config = get_bnpl_config()
+        return {
+            "TIER_A": ("Tier A", config.tier_a_limit),
+            "TIER_B": ("Tier B", config.tier_b_limit),
+            "TIER_C": ("Tier C", config.tier_c_limit),
+            "TIER_D": ("Tier D", config.tier_d_limit),
+            "DENY": ("Deny", 0),
+        }
+    
+    @classmethod
+    def get_thresholds(cls):
+        """Get score thresholds from environment."""
+        config = get_bnpl_config()
+        return {
+            "tier_a": config.tier_a_min_score,
+            "tier_b": config.tier_b_min_score,
+            "tier_c": config.tier_c_min_score,
+        }
 
 
 class RiskCalculationService:
@@ -37,40 +57,42 @@ class RiskCalculationService:
     BNPL Risk Calculation Service
     
     Evaluates user financial health and determines credit eligibility.
+    All parameters are configurable via environment variables.
     
-    Scoring Components:
-    - balance_score (50%): Based on average daily balance
-    - income_spend_score (30%): Income vs spending ratio
-    - nsf_score (20%): NSF/overdraft penalty
+    Environment Variables:
+    - BNPL_TIER_*_LIMIT: Tier limits in cents
+    - BNPL_TIER_*_MIN_SCORE: Minimum scores for tiers
+    - RISK_*: Risk calculation weights and penalties
+    - COOLDOWN_HOURS: Hours between advances
     
-    Additional Signals:
-    - utilization: Gaussian-scored burn rate analysis
-    - payback_capacity: Projected ability to repay
-    - cooldown: Prevents rapid successive advances
-    
-    Penalties:
-    - utilization high-risk: -15 points
-    - utilization medium-risk: -7.5 points
-    - payback negative: -10 points
+    See .env.example for full configuration options.
     """
     
     def __init__(
         self,
-        balance_neg_cap: int = 10_000,
-        nsf_penalty: float = 25.0,
-        balance_weight: float = 0.5,
-        income_spend_weight: float = 0.3,
-        nsf_weight: float = 0.2,
-        payback_penalty: float = 10.0,
-        cooldown_hours: int = 72
+        balance_neg_cap: int = None,
+        nsf_penalty: float = None,
+        balance_weight: float = None,
+        income_spend_weight: float = None,
+        nsf_weight: float = None,
+        payback_penalty: float = None,
+        cooldown_hours: int = None
     ):
-        self.balance_neg_cap = balance_neg_cap
-        self.nsf_penalty = nsf_penalty
-        self.balance_weight = balance_weight
-        self.income_spend_weight = income_spend_weight
-        self.nsf_weight = nsf_weight
-        self.payback_penalty = payback_penalty
-        self.cooldown_hours = cooldown_hours
+        # Load from config (environment variables) with optional overrides
+        risk_config = get_risk_config()
+        cooldown_config = get_cooldown_config()
+        
+        self.balance_neg_cap = balance_neg_cap if balance_neg_cap is not None else risk_config.balance_neg_cap
+        self.nsf_penalty = nsf_penalty if nsf_penalty is not None else risk_config.nsf_penalty
+        self.balance_weight = balance_weight if balance_weight is not None else risk_config.balance_weight
+        self.income_spend_weight = income_spend_weight if income_spend_weight is not None else risk_config.income_spend_weight
+        self.nsf_weight = nsf_weight if nsf_weight is not None else risk_config.nsf_weight
+        self.payback_penalty = payback_penalty if payback_penalty is not None else risk_config.payback_penalty
+        self.cooldown_hours = cooldown_hours if cooldown_hours is not None else cooldown_config.cooldown_hours
+        
+        # Load utilization penalties from config
+        self.util_penalty_high = risk_config.util_penalty_high_risk
+        self.util_penalty_medium = risk_config.util_penalty_medium_risk
 
     def _determine_bnpl_tier(
         self,
@@ -82,38 +104,43 @@ class RiskCalculationService:
     ) -> tuple[str, int, str]:
         """
         Determine BNPL tier based on multiple signals.
+        All thresholds and limits are configurable via environment variables.
         
         Returns: (tier_name, limit_cents, decision_reason)
         """
+        # Load tier configuration from environment
+        tiers = BNPLTier.get_tiers()
+        thresholds = BNPLTier.get_thresholds()
+        
         # Cooldown is the ONLY hard block - user must wait between advances
         if is_in_cooldown:
-            return BNPLTier.DENY[0], BNPLTier.DENY[1], "Cooldown period active - must wait before new advance"
+            return tiers["DENY"][0], tiers["DENY"][1], "Cooldown period active - must wait before new advance"
         
         # BNPL Philosophy: Everyone gets approved, limit sized by risk
         # Higher risk = smaller limit, but always give a chance
         
         # Tier A: Premium - best customers
-        if (final_score >= 75 and 
+        if (final_score >= thresholds["tier_a"] and 
             utilization_label in ("healthy", "medium-risk") and 
             payback_label in ("positive", "neutral")):
-            return BNPLTier.TIER_A[0], BNPLTier.TIER_A[1], \
+            return tiers["TIER_A"][0], tiers["TIER_A"][1], \
                 f"Tier A approved: score={final_score:.0f}, strong financial health"
         
         # Tier B: Standard - good customers  
-        if (final_score >= 55 and 
+        if (final_score >= thresholds["tier_b"] and 
             payback_label in ("positive", "neutral")):
-            return BNPLTier.TIER_B[0], BNPLTier.TIER_B[1], \
+            return tiers["TIER_B"][0], tiers["TIER_B"][1], \
                 f"Tier B approved: score={final_score:.0f}, acceptable risk profile"
         
         # Tier C: Limited - moderate risk
-        if final_score >= 35:
-            return BNPLTier.TIER_C[0], BNPLTier.TIER_C[1], \
+        if final_score >= thresholds["tier_c"]:
+            return tiers["TIER_C"][0], tiers["TIER_C"][1], \
                 f"Tier C approved: score={final_score:.0f}, limited advance recommended"
         
         # Tier D: Trial - everyone else gets minimum amount
         # This ensures ALL users can get a small advance to build trust
         risk_notes = []
-        if final_score < 35:
+        if final_score < thresholds["tier_c"]:
             risk_notes.append(f"low score ({final_score:.0f})")
         if nsf_count > 10:
             risk_notes.append(f"{nsf_count} NSF events")
@@ -121,7 +148,7 @@ class RiskCalculationService:
             risk_notes.append("negative payback")
         
         notes = f" ({', '.join(risk_notes)})" if risk_notes else ""
-        return BNPLTier.TIER_D[0], BNPLTier.TIER_D[1], \
+        return tiers["TIER_D"][0], tiers["TIER_D"][1], \
             f"Tier D trial: small advance to build history{notes}"
 
     def calculate_risk(
@@ -165,11 +192,11 @@ class RiskCalculationService:
         utilization_info = UtilizationService(transactions, paycheck_info).calculate()
         utilization_label = utilization_info.get("utilization_label", "unknown")
         
-        # Utilization penalty
+        # Utilization penalty (configurable via UTIL_PENALTY_* env vars)
         if utilization_label in ("high-risk", "very-high-risk", "critical-risk"):
-            utilization_penalty = 15.0
+            utilization_penalty = self.util_penalty_high
         elif utilization_label == "medium-risk":
-            utilization_penalty = 7.5
+            utilization_penalty = self.util_penalty_medium
         else:
             utilization_penalty = 0.0
 

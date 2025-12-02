@@ -2,289 +2,306 @@
 
 BNPL (Buy Now Pay Later) Decision API with risk scoring based on transaction analysis.
 
-## Dependencies
+## Quick Start
 
-- Python 3.10+
-- Docker
-- PostgreSQL
-- Terraform
-
-## Local Install using virtual environment (venv)
-
-1) Create virtual env
 ```bash
+# 1. Create virtual environment
 python -m venv venv
-```
+source venv/bin/activate  # Unix/macOS
 
-2) Activate environment
-```bash
-# Unix / Linux / macOS
-source venv/bin/activate
-# Windows (CMD)
-venv\Scripts\activate.bat
-```
-
-3) Install dependencies
-```bash
-# For deveopment and testing purpose
+# 2. Install dependencies
 pip install -r requirements-dev.txt
-# For production or just running
-pip install -r requirements.txt
-```
 
-4) Run test
-```bash
-python -m pytest
-```
-
-5) Copy env (create apikey and app key in Datadog)
-```bash
+# 3. Copy and configure environment
 cp .env.example .env
-```
 
-6) Run Datadog Agent 
-```bash
-docker compose up -d
-## to restart the agent (apply changes)
-docker restart dd-agent
-```
+# 4. Start mock services
+make mock-up
 
-7) Run Server
-```bash
+# 5. Apply database schema
+make db-schema
+
+# 6. Run server
 uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
-```
 
-8) Build Datadog Dashboard
-```bash
-DD_API_KEY=dd_api_key DD_APP_KEY=dd_app_key python scripts/import_dashboard.py
+# 7. Run tests
+python -m pytest
 ```
 
 ---
 
-## Risk Scoring System
+## Environment Variables
 
-### Overview
+All configuration is done through environment variables. Copy `.env.example` to `.env` and adjust as needed.
 
-The system uses a **Gaussian (Bell Curve) Scoring Model** to evaluate user financial health based on transaction data. The composite score combines three weighted metrics to produce a risk label.
+### BNPL Tier Configuration
 
-### Risk Classification Table
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BNPL_TIER_A_LIMIT` | 20000 | Tier A limit in cents ($200) |
+| `BNPL_TIER_B_LIMIT` | 12000 | Tier B limit in cents ($120) |
+| `BNPL_TIER_C_LIMIT` | 6000 | Tier C limit in cents ($60) |
+| `BNPL_TIER_D_LIMIT` | 2000 | Tier D limit in cents ($20) |
+| `BNPL_TIER_A_MIN_SCORE` | 75 | Minimum score for Tier A |
+| `BNPL_TIER_B_MIN_SCORE` | 55 | Minimum score for Tier B |
+| `BNPL_TIER_C_MIN_SCORE` | 35 | Minimum score for Tier C |
 
-| Usuario | Utilization % | Burn Days | Composite Score | Label |
-|---------|---------------|-----------|-----------------|-------|
-| **GOOD** | 85.9% | 34.9 | 80.4 | ✅ healthy |
-| **GIG** | 489% | 6.1 | 2.0 | 🔴 critical-risk |
-| **HIGHUTIL** | 289% | 10.4 | 5.2 | 🔴 critical-risk |
-| **OVERDRAFT** | 322% | 9.3 | 4.1 | 🔴 critical-risk |
+**Example - More Generous Limits:**
+```bash
+BNPL_TIER_A_LIMIT=50000  # $500
+BNPL_TIER_B_LIMIT=30000  # $300
+BNPL_TIER_C_LIMIT=15000  # $150
+BNPL_TIER_D_LIMIT=5000   # $50
+```
 
-### Gaussian Scoring Formula
+### Cooldown Settings
 
-The score for each metric is calculated using a Gaussian (bell curve) function:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COOLDOWN_HOURS` | 72 | Hours between allowed advances |
+
+**Effect:** User must wait this many hours after taking an advance before requesting another.
+
+### Risk Calculation Weights
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RISK_BALANCE_WEIGHT` | 0.5 | Weight of balance score (50%) |
+| `RISK_INCOME_SPEND_WEIGHT` | 0.3 | Weight of income/spend score (30%) |
+| `RISK_NSF_WEIGHT` | 0.2 | Weight of NSF score (20%) |
+| `RISK_BALANCE_NEG_CAP` | 10000 | Balance cap in cents for score 0 |
+| `RISK_NSF_PENALTY` | 25.0 | Points deducted per NSF event |
+| `RISK_PAYBACK_PENALTY` | 10.0 | Points deducted for negative payback |
+
+**Note:** Weights must sum to 1.0
+
+**Example - Focus on Balance:**
+```bash
+RISK_BALANCE_WEIGHT=0.6
+RISK_INCOME_SPEND_WEIGHT=0.25
+RISK_NSF_WEIGHT=0.15
+```
+
+### Utilization Penalties
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UTIL_PENALTY_HIGH_RISK` | 15.0 | Points deducted for high/critical risk |
+| `UTIL_PENALTY_MEDIUM_RISK` | 7.5 | Points deducted for medium risk |
+
+---
+
+## Gaussian Scoring System
+
+The utilization score uses a **Gaussian (Bell Curve)** function to evaluate financial health.
+
+### Formula
 
 ```
 score = exp(-((x - μ)² / (2σ²)))
 ```
 
 Where:
-- `x` = actual value of the metric
-- `μ` (mu) = ideal/optimal value
-- `σ` (sigma) = standard deviation (controls how quickly score drops)
+- `x` = actual value
+- `μ` (mu) = ideal value
+- `σ` (sigma) = tolerance
 
-**Visual representation:**
+### Utilization Parameters
 
-```
-Score
-  1.0 |        ****
-      |      **    **
-      |    **        **
-  0.5 |  **            **
-      | *                *
-  0.0 |*__________________*____
-           μ-2σ   μ   μ+2σ     Value
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UTIL_MU` | 0.6 | Ideal utilization (60% of paycheck) |
+| `UTIL_SIGMA` | 0.3 | Tolerance for deviation |
+| `UTIL_WEIGHT` | 0.45 | Weight in composite score (45%) |
 
----
-
-## Configurable Parameters
-
-All scoring parameters are defined in `domain/services/utilizations.py` and can be adjusted to tune the risk model.
-
-### 1. `UTILIZATION_PARAMS`
-
-```python
-UTILIZATION_PARAMS = (0.6, 0.3, 0.45)  # (mu, sigma, weight)
-```
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `mu` | 0.6 (60%) | Ideal utilization percentage. Users spending ~60% of income are considered healthy. |
-| `sigma` | 0.3 | How quickly score drops as utilization deviates from ideal. Lower = stricter. |
-| `weight` | 0.45 (45%) | Contribution to final composite score. |
-
-**Effect of changing values:**
-
-| Change | Effect |
+**Effects:**
+| Change | Result |
 |--------|--------|
-| ↑ mu (e.g., 0.8) | More tolerant of higher spending. Users at 80% util get max score. |
-| ↓ mu (e.g., 0.4) | Stricter. Expects users to spend only 40% of income. |
-| ↑ sigma (e.g., 0.5) | More lenient. Score drops slowly as util deviates. |
-| ↓ sigma (e.g., 0.2) | Stricter. Score drops quickly for any deviation. |
-| ↑ weight (e.g., 0.6) | Utilization has more impact on final score. |
+| ↑ `UTIL_MU` to 0.8 | Tolerates spending 80% of paycheck |
+| ↓ `UTIL_MU` to 0.4 | Expects frugal 40% spending |
+| ↑ `UTIL_SIGMA` to 0.5 | More lenient on deviations |
+| ↓ `UTIL_SIGMA` to 0.2 | Stricter, penalizes quickly |
 
-**Note:** Uses **asymmetric Gaussian** - overspending (>μ) is penalized more harshly than underspending (<μ).
+### Burn Days Parameters
 
----
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BURN_MU` | 30.0 | Ideal burn days (paycheck lasts 30 days) |
+| `BURN_SIGMA` | 15.0 | Tolerance |
+| `BURN_WEIGHT` | 0.35 | Weight in composite score (35%) |
 
-### 2. `BURN_DAYS_PARAMS`
+**Formula:** `burn_days = avg_paycheck / avg_daily_spend`
 
-```python
-BURN_DAYS_PARAMS = (30.0, 15.0, 0.35)  # (mu, sigma, weight)
-```
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `mu` | 30.0 days | Ideal burn days. User's paycheck should last ~30 days. |
-| `sigma` | 15.0 | Tolerance for deviation from ideal. |
-| `weight` | 0.35 (35%) | Contribution to final composite score. |
-
-**Burn Days Formula:**
-```
-burn_days = avg_paycheck / avg_daily_spend
-```
-
-**Effect of changing values:**
-
-| Change | Effect |
+**Effects:**
+| Change | Result |
 |--------|--------|
-| ↑ mu (e.g., 45) | Expects users to have 1.5 months of runway. Stricter. |
-| ↓ mu (e.g., 14) | More tolerant. 2-week runway is acceptable. |
-| ↑ sigma (e.g., 25) | More tolerant of variation in burn rate. |
-| ↓ sigma (e.g., 7) | Stricter. Burns < 23 or > 37 days penalized heavily. |
+| ↑ `BURN_MU` to 45 | Expects 1.5 month runway |
+| ↓ `BURN_MU` to 14 | Accepts 2-week runway |
 
-**Note:** Uses **asymmetric Gaussian** - low burn days (<μ) penalized more than high burn days (>μ), since saving is good.
+### Daily Spend Parameters
 
----
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPEND_MU` | 0.033 | Ideal daily spend ratio (3.3% of paycheck/day) |
+| `SPEND_SIGMA` | 0.02 | Tolerance |
+| `SPEND_WEIGHT` | 0.20 | Weight in composite score (20%) |
 
-### 3. `DAILY_SPEND_PARAMS`
+### Label Thresholds
 
-```python
-DAILY_SPEND_PARAMS = (0.033, 0.02, 0.20)  # (mu, sigma, weight)
-```
+| Variable | Default | Label Assigned |
+|----------|---------|----------------|
+| `LABEL_HEALTHY` | 80 | score ≥ 80 → "healthy" |
+| `LABEL_MEDIUM_RISK` | 60 | score ≥ 60 → "medium-risk" |
+| `LABEL_HIGH_RISK` | 40 | score ≥ 40 → "high-risk" |
+| `LABEL_VERY_HIGH_RISK` | 20 | score ≥ 20 → "very-high-risk" |
+| (below 20) | - | "critical-risk" |
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `mu` | 0.033 (3.3%) | Ideal daily spend as % of monthly paycheck. ~3.3%/day = 100%/month. |
-| `sigma` | 0.02 | Tolerance for deviation. |
-| `weight` | 0.20 (20%) | Contribution to final composite score. |
-
-**Daily Spend Ratio Formula:**
-```
-daily_spend_ratio = avg_daily_spend / avg_paycheck
-```
-
-**Effect of changing values:**
-
-| Change | Effect |
-|--------|--------|
-| ↑ mu (e.g., 0.05) | Tolerates higher daily spending (5% of paycheck/day). |
-| ↓ mu (e.g., 0.02) | Stricter. Expects very frugal daily spending. |
-| ↑ sigma (e.g., 0.04) | More tolerant of spending variation. |
-| ↓ sigma (e.g., 0.01) | Very strict. Any deviation penalized heavily. |
-
----
-
-### 4. `LABEL_THRESHOLDS`
-
-```python
-LABEL_THRESHOLDS = [
-    (80, "healthy"),        # score >= 80
-    (60, "medium-risk"),    # score >= 60
-    (40, "high-risk"),      # score >= 40
-    (20, "very-high-risk"), # score >= 20
-    (0, "critical-risk"),   # score < 20
-]
-```
-
-**Effect of changing thresholds:**
-
-| Change | Effect |
-|--------|--------|
-| Lower thresholds | More users classified as healthy. Approves more loans. |
-| Higher thresholds | Fewer users classified as healthy. More conservative. |
-| Add more buckets | Finer granularity in risk classification. |
-
-**Example - More Conservative:**
-```python
-LABEL_THRESHOLDS = [
-    (90, "healthy"),        # Only top 10% are healthy
-    (75, "medium-risk"),    
-    (50, "high-risk"),      
-    (25, "very-high-risk"), 
-    (0, "critical-risk"),   
-]
-```
-
-**Example - More Lenient:**
-```python
-LABEL_THRESHOLDS = [
-    (60, "healthy"),        # 60+ score is healthy
-    (40, "medium-risk"),    
-    (20, "high-risk"),      
-    (10, "very-high-risk"), 
-    (0, "critical-risk"),   
-]
+**Example - More Lenient Classification:**
+```bash
+LABEL_HEALTHY=60
+LABEL_MEDIUM_RISK=40
+LABEL_HIGH_RISK=20
+LABEL_VERY_HIGH_RISK=10
 ```
 
 ---
 
-## Composite Score Calculation
+## Risk Classification Examples
 
-The final composite score (0-100) is calculated as:
-
-```
-composite_score = (
-    utilization_score × utilization_weight +
-    burn_days_score × burn_days_weight +
-    daily_spend_score × daily_spend_weight
-) × 100
-```
-
-**Default weights must sum to 1.0:**
-- Utilization: 45%
-- Burn Days: 35%
-- Daily Spend: 20%
+| User | Utilization | Burn Days | Score | Label |
+|------|-------------|-----------|-------|-------|
+| **GOOD** | 85.9% | 34.9 | 80.4 | ✅ healthy |
+| **GIG** | 489% | 6.1 | 2.0 | 🔴 critical-risk |
+| **HIGHUTIL** | 289% | 10.4 | 5.2 | 🔴 critical-risk |
+| **OVERDRAFT** | 322% | 9.3 | 4.1 | 🔴 critical-risk |
 
 ---
 
-## Example Scenarios
+## Tier Assignment Logic
 
-### Healthy User (GOOD)
-```
-Utilization: 85.9% → score: 0.585 (close to ideal 60%)
-Burn Days: 34.9 → score: 0.987 (close to ideal 30)
-Daily Spend: 2.8%/day → score: 0.976 (close to ideal 3.3%)
+BNPL Philosophy: **Everyone gets approved**, limit sized by risk.
 
-Composite = (0.585×0.45 + 0.987×0.35 + 0.976×0.20) × 100 = 80.4
-Label: healthy ✅
-```
-
-### High-Risk User (GIG)
-```
-Utilization: 489% → score: 0.0 (way over ideal)
-Burn Days: 6.1 → score: 0.058 (burns paycheck in < 1 week)
-Daily Spend: 16.3%/day → score: 0.0 (unsustainable)
-
-Composite = (0.0×0.45 + 0.058×0.35 + 0.0×0.20) × 100 = 2.0
-Label: critical-risk 🔴
-```
+| Tier | Default Limit | Requirements |
+|------|---------------|--------------|
+| **Tier A** | $200 | score ≥ 75, healthy/medium util, positive/neutral payback |
+| **Tier B** | $120 | score ≥ 55, positive/neutral payback |
+| **Tier C** | $60 | score ≥ 35 |
+| **Tier D** | $20 | Everyone else (fallback) |
+| **Deny** | $0 | Only if in cooldown period |
 
 ---
 
-## Tuning Recommendations
+## Tuning Guide
 
 | Goal | Adjustments |
 |------|-------------|
-| **Approve more users** | Lower `LABEL_THRESHOLDS`, increase `sigma` values |
-| **Be more conservative** | Raise `LABEL_THRESHOLDS`, decrease `sigma` values |
-| **Focus on utilization** | Increase `UTILIZATION_PARAMS` weight |
-| **Focus on runway** | Increase `BURN_DAYS_PARAMS` weight |
-| **Tolerate gig workers** | Increase `mu` in `UTILIZATION_PARAMS`, lower burn_days `mu` |
+| **Approve higher amounts** | Increase `BNPL_TIER_*_LIMIT` values |
+| **More users in Tier A** | Lower `BNPL_TIER_A_MIN_SCORE` |
+| **Stricter risk assessment** | Decrease `sigma` values, increase `LABEL_*` thresholds |
+| **Tolerate gig workers** | Increase `UTIL_MU`, decrease `BURN_MU` |
+| **Faster cooldown** | Decrease `COOLDOWN_HOURS` |
+| **Harsher NSF penalty** | Increase `RISK_NSF_PENALTY` |
+
+---
+
+## API Endpoints
+
+### POST /v1/decision
+
+Request a cash advance decision.
+
+```bash
+curl -X POST http://localhost:8080/v1/decision \
+  -H "Content-Type: application/json" \
+  -H "X-Request-ID: unique-id-123" \
+  -d '{"user_id": "user_good", "amount_requested_cents": 5000}'
+```
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "user_id": "user_good",
+  "approved": true,
+  "credit_limit_cents": 12000,
+  "amount_granted_cents": 5000,
+  "score": 70.5,
+  "plan": {
+    "id": "uuid",
+    "installments": [...]
+  }
+}
+```
+
+### GET /v1/plan/{plan_id}
+
+Get plan details with installments.
+
+### GET /v1/decision/history?user_id=...
+
+Get user's decision history.
+
+### GET /metrics
+
+Prometheus metrics endpoint.
+
+---
+
+## Development
+
+### Running Tests
+
+```bash
+# All tests
+python -m pytest
+
+# Specific test file
+python -m pytest tests/risk_calculation_test.py -v
+
+# With coverage
+python -m pytest --cov=domain --cov-report=html
+```
+
+### Docker Compose
+
+```bash
+# Start all services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+---
+
+## Architecture
+
+```
+gerald-gateway/
+├── domain/
+│   ├── config.py           # Environment variable configuration
+│   ├── entities/           # Domain entities (Decision, Plan)
+│   ├── interfaces/         # Repository interfaces
+│   └── services/
+│       ├── risk_calculation.py  # Main risk scoring service
+│       ├── utilizations.py      # Gaussian scoring
+│       ├── payback_capacity.py  # Payback analysis
+│       └── cooldown.py          # Cooldown logic
+├── application/
+│   └── service/            # Use cases
+├── infrastructure/
+│   ├── db/                 # Database repositories
+│   └── clients/            # External service clients
+├── presentation/
+│   └── api/                # FastAPI routers
+└── tests/
+```
+
+---
+
+## License
+
+MIT

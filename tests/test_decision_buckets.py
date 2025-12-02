@@ -82,14 +82,16 @@ class TestDecisionBuckets:
         assert result["final_score"] < 50
 
     def test_tier_limits_are_correct(self):
-        """Verify tier limit amounts are as specified."""
+        """Verify tier limit amounts are loaded from config (default values)."""
         from domain.services.risk_calculation import BNPLTier
         
-        assert BNPLTier.TIER_A[1] == 20000  # $200
-        assert BNPLTier.TIER_B[1] == 12000  # $120
-        assert BNPLTier.TIER_C[1] == 6000   # $60
-        assert BNPLTier.TIER_D[1] == 2000   # $20
-        assert BNPLTier.DENY[1] == 0
+        tiers = BNPLTier.get_tiers()
+        # Default values from .env.example
+        assert tiers["TIER_A"][1] == 20000  # $200
+        assert tiers["TIER_B"][1] == 12000  # $120
+        assert tiers["TIER_C"][1] == 6000   # $60
+        assert tiers["TIER_D"][1] == 2000   # $20
+        assert tiers["DENY"][1] == 0
 
     def test_decision_includes_reasons(self):
         """Verify decision includes explainability reasons."""
