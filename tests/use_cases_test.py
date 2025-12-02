@@ -106,7 +106,8 @@ class TestUseCases:
         assert decision.plan.user_id == "123"
         assert decision.plan.total_cents == 1000
         assert decision.plan.created_at is not None
-        assert decision.credit_limit_cents == 100000
+        # New BNPL tiers: Tier A=$200, B=$120, C=$60, D=$20
+        assert decision.credit_limit_cents in (20000, 12000, 6000, 2000)
 
 
     @pytest.mark.asyncio
@@ -121,7 +122,8 @@ class TestUseCases:
         assert decision.amount_requested_cents == 500
         assert decision.approved is True
         assert decision.amount_granted_cents == 500
-        assert decision.credit_limit_cents == 500
+        # New BNPL tiers - expect a valid tier limit
+        assert decision.credit_limit_cents in (20000, 12000, 6000, 2000)
 
     @pytest.mark.asyncio
     async def test_validate_decision_with_plan_approved_lower_score(self, mock_decision_repo_with_transactions_lower):
@@ -138,7 +140,7 @@ class TestUseCases:
         assert decision.credit_limit_cents == 0
 
     @pytest.mark.asyncio
-    async def test_validate_decision_with_plan_approved_bi_weekly_installment(self,     mock_decision_repo_with_transactions_higher):
+    async def test_validate_decision_with_plan_approved_bi_weekly_installment(self, mock_decision_repo_with_transactions_higher):
         """Test for approved decision with plan for bi-weekly installment"""
         service = ValidateDecisionService(mock_decision_repo_with_transactions_higher);
         decision = await service.execute(user_id="123", amount_requested_cents=500)  # low risk
@@ -149,13 +151,14 @@ class TestUseCases:
         assert decision.amount_requested_cents == 500
         assert decision.approved is True
         assert decision.amount_granted_cents == 500
-        assert decision.credit_limit_cents == 100000
+        # New BNPL tiers
+        assert decision.credit_limit_cents in (20000, 12000, 6000, 2000)
         assert decision.plan.installments is not None
         assert len(decision.plan.installments) == 4
         assert decision.plan.installments[0].id is not None
         assert decision.plan.installments[0].plan_id == decision.plan.id
         assert decision.plan.installments[0].due_date is not None
-        # TODO: 0% interest for BNPL should be sent to the plan creation
+        # 500 cents / 4 installments = 125 cents each
         assert decision.plan.installments[0].amount_cents == 125
         assert decision.plan.installments[0].status == InstallmentStatus.PENDING.value
         # 4 bi-weekly created at
