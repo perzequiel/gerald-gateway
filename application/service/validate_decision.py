@@ -1,5 +1,5 @@
 import time
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from domain.entities import Decision, Plan
 from domain.interfaces import TransactionRepository, DecisionRepository, PlanRepository, WebhookPort, MetricsPort, LoggingPort
 from domain.services import RiskCalculationService

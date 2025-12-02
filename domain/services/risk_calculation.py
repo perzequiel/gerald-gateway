@@ -1,13 +1,7 @@
-from datetime import datetime, timedelta
 from typing import TypedDict
-
-class InternalTransaction:
-    date: datetime
-    amount_cents: int
-    type: str
-    balance_cents: int
-    nsf: bool
-
+from .basics_features import BasicsFeatures, MonthlyIncomeVsSpend
+from .internal_transactions import InternalTransaction
+from .decision import DecisionService
 
 class ComponentScores(TypedDict):
     balance_score: float
@@ -69,60 +63,6 @@ class RiskCalculationService:
         # maximum amount for the limit bucket 1000
         self.max_amount_for_limit_bucket = max_amount_for_limit_bucket
 
-    # private method
-    def __clamp(self, x: float, lo: float, hi: float) -> float:
-        return max(lo, min(hi, x))
-
-    # private method
-    def __normalize_and_sort_transactions(self, transactions: list[InternalTransaction]) -> list[InternalTransaction]:
-        # Normalize dates to date objects (drop time) deterministically
-        for t in transactions:
-            if isinstance(t.date, str):
-                t.date = datetime.strptime(t.date, "%Y-%m-%d").date()
-            elif isinstance(t.date, datetime):
-                t.date = t.date.date()
-            # if already a date, keep it
-        # Stable sort by date (preserves input order within the same day)
-        txs = sorted(transactions, key=lambda t: t.date)
-        return txs
-
-    # private method
-    def __fill_days_with_carry_forward(self, transactions: list[InternalTransaction]) -> list[InternalTransaction]:
-        day_last_balance = {}
-        last_known_balance = 0
-        for t in transactions:
-            day = t.date
-            # Update rolling last known balance if this txn reports one
-            if t.balance_cents is not None:
-                last_known_balance = t.balance_cents
-            # Record the FIRST value for the day only (first-of-day policy)
-            if day not in day_last_balance:
-                if t.balance_cents is not None:
-                    day_last_balance[day] = t.balance_cents
-                else:
-                    day_last_balance[day] = last_known_balance
-        return day_last_balance
-
-    def __calculate_avg_daily_balance(self, transactions: list[InternalTransaction]) -> float:
-        # --- normalize and sort ---
-        txs = self.__normalize_and_sort_transactions(transactions)
-        # --- build day -> last balance available that day ---
-        day_last_balance = self.__fill_days_with_carry_forward(txs)
-        # --- calculate average daily balance ---
-        start = txs[0].date
-        end = txs[-1].date
-        daily_balances = []
-        num_days = (end - start).days + 1
-        last_known = None
-        for i in range(num_days):
-            d = start + timedelta(days=i)
-            if d in day_last_balance:
-                last_known = day_last_balance[d]
-                daily_balances.append(last_known)
-            else:
-                daily_balances.append(last_known if last_known is not None else 0)
-        return sum(daily_balances) / max(1, len(daily_balances))
-
     def calculate_risk(self, transactions: list[InternalTransaction]) -> RiskScore:
         """
         Input: list of transactions (each with keys: 'date' YYYY-MM-DD, 'amount_cents', 'type' ('debit'|'credit'),
@@ -140,81 +80,45 @@ class RiskCalculationService:
             return {"error": "no transactions"}
 
         # average daily balance
-        avg_daily_balance = self.__calculate_avg_daily_balance(transactions)
+        avg_daily_balance = BasicsFeatures.calculate_avg_daily_balance(transactions)
 
         # income vs spend (sum totals)
-        total_income = 0
-        total_spend = 0 
-        for t in transactions:
-            if t.type == 'credit':
-                total_income += t.amount_cents
-            else:
-                total_spend += t.amount_cents
-
-        # monthlyize: calculate factor months in the period (portions of 30 days)
-        # Use normalized, sorted transactions for deterministic start/end
-        txs_norm = self.__normalize_and_sort_transactions(transactions)
-        start = txs_norm[0].date
-        end = txs_norm[-1].date
-        period_days = max(1, (end - start).days + 1)
-        months = period_days / 30.0
-        months = max(months, 1/30)  # avoid div by 0
-        monthly_income = total_income / months
-        monthly_spend = total_spend / months
+        income_vs_spend: MonthlyIncomeVsSpend = BasicsFeatures.calculate_monthly_income_vs_spend(transactions)
+        monthly_income = income_vs_spend.income
+        monthly_spend = income_vs_spend.spend
 
         # --- NSF / overdraft count ---
-        nsf_count = 0
-        for t in transactions:
-            if t.nsf is True:
-                nsf_count += 1
-            # if is debit and has balance_cents and after the debit the balance is < 0 -> counts as overdraft
-            # (only count if nsf is not already True to avoid double counting)
-            elif t.type == 'debit' and t.balance_cents is not None and t.balance_cents < 0:
-                nsf_count += 1
+        nsf_count = BasicsFeatures.calculate_nsf_count(transactions)
 
         # --- scoring components ---
         # 1) balance_score: if avg >= 0 => 100, if avg <= -self.balance_neg_cap => 0, linear between medias  
-        if avg_daily_balance >= 0:
-            balance_score = 100.0
-        else:
-            balance_score = 100.0 * (1 - (min(abs(avg_daily_balance), self.balance_neg_cap) / self.balance_neg_cap))
-        balance_score = self.__clamp(balance_score, 0.0, 100.0)
+        balance_score = BasicsFeatures.calculate_balance_score(avg_daily_balance, self.balance_neg_cap)
 
         # 2) income vs spend score: ratio = income / spend (if spend=0 => 100)
-        if monthly_spend <= 0:
-            income_spend_score = 100.0
-        else:
-            ratio = monthly_income / monthly_spend
-            income_spend_score = self.__clamp(ratio * 100.0, 0.0, 100.0)
+        income_spend_score = BasicsFeatures.calculate_income_spend_score(monthly_income, monthly_spend)
 
         # 3) nsf score: penalize quickly for each event (eg: 0 events => 100, 4+ => 0)
-        nsf_score = self.__clamp(100.0 - nsf_count * self.nsf_penalty, 0.0, 100.0)
+        nsf_score = BasicsFeatures.calculate_nsf_score(nsf_count, self.nsf_penalty)
 
         # weighted combination (adjust weights if you want)
-        final_score = (self.balance_weight * balance_score) + (self.income_spend_weight * income_spend_score) + (self.nsf_weight * nsf_score)
-        final_score = self.__clamp(final_score, 0.0, 100.0)
+        final_score = BasicsFeatures.calculate_final_score(
+            balance_score=balance_score,
+            income_spend_score=income_spend_score,
+            nsf_score=nsf_score,
+            balance_weight=self.balance_weight,
+            income_spend_weight=self.income_spend_weight,
+            nsf_weight=self.nsf_weight
+        )
 
         # --- bucket mapping (simple example) ---
-        if final_score < 20:
-            limit_bucket = "0"
-            limit_amount = 0
-        elif final_score < 40:
-            limit_bucket = "100-400"
-            limit_amount = 400
-        elif final_score < 70:
-            limit_bucket = "500"
-            limit_amount = 500
-        else:
-            limit_bucket = "1000"
-            limit_amount = self.max_amount_for_limit_bucket
+        limit_bucket, limit_amount = BasicsFeatures.calculate_limit_bucket(final_score, self.max_amount_for_limit_bucket)
+        
         # reasons breakdown
-        reasons = []
-        if avg_daily_balance < 0:
-            reasons.append("avg_daily_balance negative")
-        if monthly_income < monthly_spend:
-            reasons.append("monthly spend > income")
-        if nsf_count > 0:
-            reasons.append(f"{nsf_count} overdraft/nsf events")
+        reasons = DecisionService(
+            avg_daily_balance=avg_daily_balance, 
+            monthly_income=monthly_income, monthly_spend=monthly_spend,
+            nsf_count=nsf_count
+            ).make_decision()
 
         return RiskScore(
             avg_daily_balance_cents=int(avg_daily_balance), 

@@ -17,7 +17,7 @@ class Plan:
     days_between_installments: int = 14
 
     @staticmethod
-    def create(decision_id: str, user_id: str, total_cents: int, installments_count: int = 4, days_between_installments: int = 14, interest_percentage: float = 0.05) -> 'Plan':
+    def create(decision_id: str, user_id: str, total_cents: int, installments_count: int = 4, days_between_installments: int = 14, interest_percentage: float = 0) -> 'Plan':
         plan = Plan(id=str(uuid4()), 
             decision_id=decision_id, 
             user_id=user_id,
