@@ -85,53 +85,44 @@ class RiskCalculationService:
         
         Returns: (tier_name, limit_cents, decision_reason)
         """
-        # Cooldown overrides everything
+        # Cooldown is the ONLY hard block - user must wait between advances
         if is_in_cooldown:
             return BNPLTier.DENY[0], BNPLTier.DENY[1], "Cooldown period active - must wait before new advance"
         
-        # Extreme NSF count is automatic deny (20+ events in 90 days is severe)
-        if nsf_count >= 20:
-            return BNPLTier.DENY[0], BNPLTier.DENY[1], f"Denied due to excessive NSF events ({nsf_count})"
+        # BNPL Philosophy: Everyone gets approved, limit sized by risk
+        # Higher risk = smaller limit, but always give a chance
         
-        # Tier A: Premium - best customers (score drives decision, NSF already penalized in score)
-        if (final_score >= 80 and 
-            utilization_label == "healthy" and 
-            payback_label == "positive" and
-            nsf_count <= 2):
+        # Tier A: Premium - best customers
+        if (final_score >= 75 and 
+            utilization_label in ("healthy", "medium-risk") and 
+            payback_label in ("positive", "neutral")):
             return BNPLTier.TIER_A[0], BNPLTier.TIER_A[1], \
-                f"Tier A approved: score={final_score:.0f}, healthy utilization, positive payback"
+                f"Tier A approved: score={final_score:.0f}, strong financial health"
         
-        # Tier B: Standard - good customers
-        if (final_score >= 65 and 
-            utilization_label in ("healthy", "medium-risk") and
-            payback_label in ("positive", "neutral") and
-            nsf_count <= 5):
+        # Tier B: Standard - good customers  
+        if (final_score >= 55 and 
+            payback_label in ("positive", "neutral")):
             return BNPLTier.TIER_B[0], BNPLTier.TIER_B[1], \
-                f"Tier B approved: score={final_score:.0f}, acceptable utilization and payback"
+                f"Tier B approved: score={final_score:.0f}, acceptable risk profile"
         
-        # Tier C: Limited - moderate risk (rely more on score)
-        if final_score >= 50 and nsf_count <= 10:
+        # Tier C: Limited - moderate risk
+        if final_score >= 35:
             return BNPLTier.TIER_C[0], BNPLTier.TIER_C[1], \
                 f"Tier C approved: score={final_score:.0f}, limited advance recommended"
         
-        # Tier D: Trial - first-time or rebuilding (most lenient)
-        if final_score >= 35 and nsf_count <= 15:
-            return BNPLTier.TIER_D[0], BNPLTier.TIER_D[1], \
-                f"Tier D trial: score={final_score:.0f}, small trial advance only"
-        
-        # Deny - explain why
-        deny_reasons = []
+        # Tier D: Trial - everyone else gets minimum amount
+        # This ensures ALL users can get a small advance to build trust
+        risk_notes = []
         if final_score < 35:
-            deny_reasons.append(f"low score ({final_score:.0f})")
-        if utilization_label in ("very-high-risk", "critical-risk"):
-            deny_reasons.append(f"high utilization ({utilization_label})")
+            risk_notes.append(f"low score ({final_score:.0f})")
+        if nsf_count > 10:
+            risk_notes.append(f"{nsf_count} NSF events")
         if payback_label == "negative":
-            deny_reasons.append("negative payback capacity")
-        if nsf_count > 15:
-            deny_reasons.append(f"high NSF count ({nsf_count})")
+            risk_notes.append("negative payback")
         
-        reason = "Denied: " + ", ".join(deny_reasons) if deny_reasons else "Denied: does not meet criteria"
-        return BNPLTier.DENY[0], BNPLTier.DENY[1], reason
+        notes = f" ({', '.join(risk_notes)})" if risk_notes else ""
+        return BNPLTier.TIER_D[0], BNPLTier.TIER_D[1], \
+            f"Tier D trial: small advance to build history{notes}"
 
     def calculate_risk(
         self,

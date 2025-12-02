@@ -162,6 +162,7 @@ class TestRiskCalculationService:
         assert risk_score["component_scores"]["income_spend_score"] == 0.0
         assert risk_score["component_scores"]["nsf_score"] == 0.0
         assert risk_score["final_score"] == 0.0
-        # Should be denied
-        assert risk_score["limit_bucket"] == "Deny"
-        assert risk_score["approved"] is False
+        # BNPL philosophy: everyone gets approved, worst case gets Tier D (smallest limit)
+        assert risk_score["limit_bucket"] == "Tier D"
+        assert risk_score["approved"] is True
+        assert risk_score["limit_amount"] == 2000  # $20 trial limit

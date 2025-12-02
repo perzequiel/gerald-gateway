@@ -128,9 +128,9 @@ class BasicsFeatures:
     def calculate_limit_bucket(final_score: float, max_amount_for_limit_bucket: int) -> tuple[str, int]:
         if final_score < 20:
             return "0", 0
-        elif final_score < 40:
-            return "100-400", 400
-        elif final_score < 70:
-            return "500", 500
+        elif final_score < 4000:
+            return "100-400", 40000
+        elif final_score < 7000:
+            return "500", 50000
         else:
             return "1000", max_amount_for_limit_bucket

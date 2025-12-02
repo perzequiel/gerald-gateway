@@ -127,17 +127,18 @@ class TestUseCases:
 
     @pytest.mark.asyncio
     async def test_validate_decision_with_plan_approved_lower_score(self, mock_decision_repo_with_transactions_lower):
-        """Test for approved decision with plan"""
+        """Test for decision with lower score - BNPL approves everyone with appropriate tier"""
         service = ValidateDecisionService(mock_decision_repo_with_transactions_lower);
-        decision = await service.execute(user_id="123", amount_requested_cents=500)  # low risk
+        decision = await service.execute(user_id="123", amount_requested_cents=500)
         
         assert decision is not None
         assert decision.id is not None
         assert decision.user_id == "123"
         assert decision.amount_requested_cents == 500
-        assert decision.approved is False
-        assert decision.amount_granted_cents == 0
-        assert decision.credit_limit_cents == 0
+        # BNPL philosophy: everyone gets approved, lower scores get smaller limits (Tier D = $20)
+        assert decision.approved is True
+        assert decision.amount_granted_cents == 500  # Requested amount within Tier D limit
+        assert decision.credit_limit_cents == 2000  # Tier D = $20
 
     @pytest.mark.asyncio
     async def test_validate_decision_with_plan_approved_bi_weekly_installment(self, mock_decision_repo_with_transactions_higher):
