@@ -1,4 +1,6 @@
 from typing import TypedDict
+
+from .utilizations import PaycheckInfo, UtilizationService
 from .basics_features import BasicsFeatures, MonthlyIncomeVsSpend
 from .internal_transactions import InternalTransaction
 from .decision import DecisionService
@@ -18,6 +20,7 @@ class RiskScore(TypedDict):
         balance_score: float,
         income_spend_score: float,
         nsf_score: float,
+        utilization_info: dict,
         final_score: float,
         max_amount_for_limit_bucket: int,
         limit_bucket: str,
@@ -35,6 +38,7 @@ class RiskScore(TypedDict):
         self.limit_bucket = limit_bucket
         self.limit_amount = limit_amount
         self.reasons = reasons
+        self.utilization_info = utilization_info
         self.max_amount_for_limit_bucket = max_amount_for_limit_bucket
         self.component_scores = ComponentScores(
             balance_score=balance_score,
@@ -100,6 +104,28 @@ class RiskCalculationService:
         # 3) nsf score: penalize quickly for each event (eg: 0 events => 100, 4+ => 0)
         nsf_score = BasicsFeatures.calculate_nsf_score(nsf_count, self.nsf_penalty)
 
+        # 4) utilization score: calculate the utilization of the credit limit
+        paycheck_info = PaycheckInfo(
+            avg_paycheck_cents=int(monthly_income) if monthly_income and monthly_income > 0 else None,
+            # assume monthly cycle by default if no income cycle detector is available (30 days)
+            period_days=30,
+            # low/high confidence based on whether income is detected
+            paycheck_confidence=0.8 if monthly_income and monthly_income > 0 else 0.0,
+        )
+        # trnx = Normalization.normalize_and_sort_trxns(transactions)
+        utilization_info = UtilizationService(transactions, paycheck_info).calculate()
+
+
+        # add utilization label to early reasons
+        if utilization_info.get("utilization_label") == "high-risk":
+            # strong penalty if the user burns the paycheck
+            # simple adjustment: subtract 15 points from the final_score later
+            utilization_penalty = 15.0
+        elif utilization_info.get("utilization_label") == "medium-risk":
+            utilization_penalty = 7.5
+        else:
+            utilization_penalty = 0.0
+        
         # weighted combination (adjust weights if you want)
         final_score = BasicsFeatures.calculate_final_score(
             balance_score=balance_score,
@@ -107,7 +133,8 @@ class RiskCalculationService:
             nsf_score=nsf_score,
             balance_weight=self.balance_weight,
             income_spend_weight=self.income_spend_weight,
-            nsf_weight=self.nsf_weight
+            nsf_weight=self.nsf_weight,
+            utilization_penalty=utilization_penalty
         )
 
         # --- bucket mapping (simple example) ---
@@ -117,8 +144,11 @@ class RiskCalculationService:
         reasons = DecisionService(
             avg_daily_balance=avg_daily_balance, 
             monthly_income=monthly_income, monthly_spend=monthly_spend,
-            nsf_count=nsf_count
+            nsf_count=nsf_count,
+            utilization_info=utilization_info
             ).make_decision()
+
+        reasons.append(f"utilization_label={utilization_info.get('utilization_label')}, utilization_pct={utilization_info.get('utilization_pct')}")
 
         return RiskScore(
             avg_daily_balance_cents=int(avg_daily_balance), 
@@ -132,6 +162,7 @@ class RiskCalculationService:
             limit_bucket=limit_bucket,
             limit_amount=limit_amount,
             reasons=reasons,
+            utilization_info=utilization_info,
             component_scores=ComponentScores(
                 balance_score=round(balance_score, 1),
                 income_spend_score=round(income_spend_score, 1),
