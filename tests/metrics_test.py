@@ -167,13 +167,14 @@ class TestDecisionMetrics:
             metrics_port=metrics_adapter
         )
         
+        # Request $50 (5000 cents) - within new BNPL tier limits ($200 max for Tier A)
         decision = await service.execute(
             user_id="user_good",
-            amount_requested_cents=40000,
+            amount_requested_cents=5000,
             request_id="test-metrics-approved"
         )
         
-        # Verify decision was approved
+        # Verify decision was approved (amount within tier limit)
         assert decision.approved is True
         
         # Verify metrics were incremented by checking the /metrics endpoint

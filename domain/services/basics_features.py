@@ -112,16 +112,17 @@ class BasicsFeatures:
     
     @staticmethod
     def calculate_final_score(
-        balance_score: float,
-        income_spend_score: float,
-        nsf_score: float,
-        utilization_penalty: float,
-        balance_weight: float,
-        income_spend_weight: float,
-        nsf_weight: float) -> float:
-        final_score = balance_score * balance_weight + income_spend_score * income_spend_weight + nsf_score * nsf_weight    
-        final_score -= utilization_penalty
-        return BasicsFeatures.clamp(final_score, 0.0, 100.0)
+        balance_score: float, 
+        income_spend_score: float, 
+        nsf_score: float, 
+        balance_weight: float, 
+        income_spend_weight: float, 
+        nsf_weight: float,
+        utilization_penalty: float = 0.0
+    ) -> float:
+        """Calculate final score with optional utilization penalty."""
+        base_score = balance_score * balance_weight + income_spend_score * income_spend_weight + nsf_score * nsf_weight
+        return BasicsFeatures.clamp(base_score - utilization_penalty, 0.0, 100.0)
     
     @staticmethod
     def calculate_limit_bucket(final_score: float, max_amount_for_limit_bucket: int) -> tuple[str, int]:

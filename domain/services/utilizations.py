@@ -1,3 +1,8 @@
+"""
+Utilization Service
+
+Calculates utilization metrics using a Gaussian-weighted composite score.
+"""
 from datetime import timedelta
 import math
 import os
@@ -15,22 +20,11 @@ class PaycheckInfo:
 
 
 class UtilizationConfig:
-    """
-    Configuration class for Gaussian scoring parameters.
+    """Configuration class for Gaussian scoring parameters."""
     
-    Can be instantiated with custom values or loaded from environment variables.
-    
-    Environment variables (optional):
-    - UTIL_MU, UTIL_SIGMA, UTIL_WEIGHT
-    - BURN_MU, BURN_SIGMA, BURN_WEIGHT
-    - SPEND_MU, SPEND_SIGMA, SPEND_WEIGHT
-    - LABEL_HEALTHY, LABEL_MEDIUM, LABEL_HIGH, LABEL_VERY_HIGH
-    """
-    
-    # Default values
-    DEFAULT_UTILIZATION_PARAMS = (0.6, 0.3, 0.45)    # (mu, sigma, weight)
-    DEFAULT_BURN_DAYS_PARAMS = (30.0, 15.0, 0.35)    # (mu, sigma, weight)
-    DEFAULT_DAILY_SPEND_PARAMS = (0.033, 0.02, 0.20) # (mu, sigma, weight)
+    DEFAULT_UTILIZATION_PARAMS = (0.6, 0.3, 0.45)
+    DEFAULT_BURN_DAYS_PARAMS = (30.0, 15.0, 0.35)
+    DEFAULT_DAILY_SPEND_PARAMS = (0.033, 0.02, 0.20)
     DEFAULT_LABEL_THRESHOLDS = [
         (80, "healthy"),
         (60, "medium-risk"),
@@ -47,17 +41,6 @@ class UtilizationConfig:
         label_thresholds: Optional[list[tuple[int, str]]] = None,
         load_from_env: bool = True
     ):
-        """
-        Initialize configuration with custom parameters or defaults.
-        
-        Args:
-            utilization_params: (mu, sigma, weight) for utilization scoring
-            burn_days_params: (mu, sigma, weight) for burn days scoring
-            daily_spend_params: (mu, sigma, weight) for daily spend scoring
-            label_thresholds: List of (threshold, label) tuples, sorted descending
-            load_from_env: If True and params not provided, try loading from env vars
-        """
-        # Utilization params
         if utilization_params:
             self.utilization_params = utilization_params
         elif load_from_env and os.getenv("UTIL_MU"):
@@ -69,7 +52,6 @@ class UtilizationConfig:
         else:
             self.utilization_params = self.DEFAULT_UTILIZATION_PARAMS
         
-        # Burn days params
         if burn_days_params:
             self.burn_days_params = burn_days_params
         elif load_from_env and os.getenv("BURN_MU"):
@@ -81,7 +63,6 @@ class UtilizationConfig:
         else:
             self.burn_days_params = self.DEFAULT_BURN_DAYS_PARAMS
         
-        # Daily spend params
         if daily_spend_params:
             self.daily_spend_params = daily_spend_params
         elif load_from_env and os.getenv("SPEND_MU"):
@@ -93,7 +74,6 @@ class UtilizationConfig:
         else:
             self.daily_spend_params = self.DEFAULT_DAILY_SPEND_PARAMS
         
-        # Label thresholds
         if label_thresholds:
             self.label_thresholds = label_thresholds
         elif load_from_env and os.getenv("LABEL_HEALTHY"):
@@ -107,7 +87,6 @@ class UtilizationConfig:
         else:
             self.label_thresholds = self.DEFAULT_LABEL_THRESHOLDS
         
-        # Validate weights sum to 1.0
         total_weight = (
             self.utilization_params[2] + 
             self.burn_days_params[2] + 
@@ -118,23 +97,8 @@ class UtilizationConfig:
 
 
 class UtilizationService:
-    """
-    Service to calculate utilization metrics using a Gaussian-weighted composite score.
+    """Service to calculate utilization metrics using Gaussian-weighted scoring."""
     
-    The composite score combines three metrics with bell-curve (Gaussian) functions:
-    - utilization_pct: % of paycheck spent (ideal ~60%, σ=0.3)
-    - burn_days: days until paycheck depleted (ideal ~30 days, σ=15)
-    - avg_daily_spend_ratio: daily spend as % of paycheck (ideal ~3.3%, σ=2%)
-    
-    Each metric contributes to a weighted health score (0-100), which maps to risk labels.
-    
-    Parameters are configurable via:
-    1. Constructor injection (UtilizationConfig)
-    2. Environment variables (UTIL_MU, BURN_MU, etc.)
-    3. Class defaults
-    """
-    
-    # Default class-level parameters (for backward compatibility)
     UTILIZATION_PARAMS = UtilizationConfig.DEFAULT_UTILIZATION_PARAMS
     BURN_DAYS_PARAMS = UtilizationConfig.DEFAULT_BURN_DAYS_PARAMS
     DAILY_SPEND_PARAMS = UtilizationConfig.DEFAULT_DAILY_SPEND_PARAMS
@@ -146,21 +110,9 @@ class UtilizationService:
         paycheck_info: PaycheckInfo,
         config: Optional[UtilizationConfig] = None
     ):
-        """
-        Initialize the service with transactions and optional custom configuration.
-        
-        Args:
-            transactions: List of user transactions
-            paycheck_info: User's paycheck information
-            config: Optional custom configuration. If None, uses defaults/env vars.
-        """
         self.transactions = Normalization.normalize_and_sort_trxns(transactions)
         self.paycheck_info = paycheck_info
-        
-        # Use provided config or create default (which may load from env)
         self.config = config or UtilizationConfig()
-        
-        # Set instance-level params from config
         self.UTILIZATION_PARAMS = self.config.utilization_params
         self.BURN_DAYS_PARAMS = self.config.burn_days_params
         self.DAILY_SPEND_PARAMS = self.config.daily_spend_params
@@ -168,16 +120,6 @@ class UtilizationService:
 
     @staticmethod
     def _gaussian_score(value: float, mu: float, sigma: float) -> float:
-        """
-        Calculate Gaussian (bell curve) score for a given value.
-        
-        Formula: score = exp(-((x - μ)² / (2σ²)))
-        
-        Returns a value between 0 and 1, where:
-        - 1.0 = value is at the ideal (mu)
-        - Drops smoothly as value deviates from ideal
-        - sigma controls how quickly it drops
-        """
         if value is None:
             return 0.0
         exponent = -((value - mu) ** 2) / (2 * sigma ** 2)
@@ -185,12 +127,6 @@ class UtilizationService:
     
     @staticmethod
     def _asymmetric_gaussian_score(value: float, mu: float, sigma_left: float, sigma_right: float) -> float:
-        """
-        Asymmetric Gaussian for metrics where being below ideal is good, above is bad.
-        
-        - Values below mu use sigma_left (gentler penalty)
-        - Values above mu use sigma_right (harsher penalty)
-        """
         if value is None:
             return 0.0
         sigma = sigma_left if value <= mu else sigma_right
@@ -203,30 +139,16 @@ class UtilizationService:
         burn_days: float, 
         daily_spend_ratio: float
     ) -> dict:
-        """
-        Calculate individual Gaussian scores for each component.
-        
-        Returns dict with individual scores (0-1) and weighted contributions.
-        """
-        # Utilization score: asymmetric - being under budget is fine, over is bad
         util_mu, util_sigma, util_weight = self.UTILIZATION_PARAMS
         util_score = self._asymmetric_gaussian_score(
-            utilization, 
-            mu=util_mu, 
-            sigma_left=0.5,   # gentle penalty for under-spending
-            sigma_right=0.25  # harsh penalty for over-spending
+            utilization, mu=util_mu, sigma_left=0.5, sigma_right=0.25
         )
         
-        # Burn days score: asymmetric - more days is better, fewer is worse
         burn_mu, burn_sigma, burn_weight = self.BURN_DAYS_PARAMS
         burn_score = self._asymmetric_gaussian_score(
-            burn_days if burn_days else 0,
-            mu=burn_mu,
-            sigma_left=10.0,  # harsh penalty for quick burn
-            sigma_right=30.0  # gentle penalty for slow burn (saving is good)
+            burn_days if burn_days else 0, mu=burn_mu, sigma_left=10.0, sigma_right=30.0
         )
         
-        # Daily spend ratio score: symmetric Gaussian
         spend_mu, spend_sigma, spend_weight = self.DAILY_SPEND_PARAMS
         spend_score = self._gaussian_score(daily_spend_ratio, spend_mu, spend_sigma)
         
@@ -242,42 +164,21 @@ class UtilizationService:
         }
 
     def _calculate_composite_score(self, component_scores: dict) -> float:
-        """
-        Calculate weighted composite health score (0-100).
-        
-        Formula: score = Σ(component_score × weight) × 100
-        """
         weights = component_scores["weights"]
-        
         weighted_sum = (
             component_scores["utilization_score"] * weights["utilization"] +
             component_scores["burn_days_score"] * weights["burn_days"] +
             component_scores["daily_spend_score"] * weights["daily_spend"]
         )
-        
         return round(weighted_sum * 100, 1)
 
     def _score_to_label(self, score: float) -> str:
-        """Map composite score to risk label using thresholds."""
         for threshold, label in self.LABEL_THRESHOLDS:
             if score >= threshold:
                 return label
         return "critical-risk"
 
     def calculate(self) -> dict:
-        """
-        Calculate utilization metrics with Gaussian-weighted composite scoring.
-        
-        Returns dict with:
-        - utilization_pct: ratio of debits to paycheck
-        - avg_daily_spend_cents: average daily spending
-        - burn_days: days until paycheck depleted at current rate
-        - utilization_label: risk classification based on composite score
-        - composite_score: weighted health score (0-100)
-        - component_scores: breakdown of individual metric scores
-        - cycle_start, cycle_end: analysis period
-        """
-        # Handle missing/low confidence paycheck info
         if not self.paycheck_info or self.paycheck_info.paycheck_confidence < 0.3:
             return self._empty_result()
 
@@ -287,34 +188,22 @@ class UtilizationService:
         if not avg_paycheck or not period_days:
             return self._empty_result()
 
-        # Calculate cycle boundaries
         last_day = self.transactions[-1].date
         start_cycle = last_day - timedelta(days=int(period_days))
 
-        # Sum debits within cycle
         debits = [t for t in self.transactions if t.type == "debit" and t.date >= start_cycle]
         total_debits = sum(d.amount_cents for d in debits)
 
-        # Core metrics
         utilization = total_debits / avg_paycheck if avg_paycheck > 0 else None
         days = max(1, (last_day - start_cycle).days)
         avg_daily_spend = total_debits / days if days > 0 else 0
         burn_days = avg_paycheck / avg_daily_spend if avg_daily_spend > 0 else None
-        
-        # Daily spend as ratio of paycheck (for Gaussian scoring)
         daily_spend_ratio = avg_daily_spend / avg_paycheck if avg_paycheck > 0 else 0
 
-        # Calculate Gaussian component scores
         component_scores = self._calculate_component_scores(
-            utilization=utilization,
-            burn_days=burn_days,
-            daily_spend_ratio=daily_spend_ratio
+            utilization=utilization, burn_days=burn_days, daily_spend_ratio=daily_spend_ratio
         )
-        
-        # Calculate weighted composite score
         composite_score = self._calculate_composite_score(component_scores)
-        
-        # Map score to label
         label = self._score_to_label(composite_score) if utilization is not None else "unknown"
 
         return {
@@ -329,7 +218,6 @@ class UtilizationService:
         }
 
     def _empty_result(self) -> dict:
-        """Return empty result for invalid/missing data."""
         return {
             "utilization_pct": None,
             "avg_daily_spend_cents": None,

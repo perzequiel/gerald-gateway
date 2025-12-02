@@ -336,12 +336,13 @@ class TestIntegrationResilience:
             
             try:
                 # First request - creates new decision
+                # Request $50 (5000 cents) - within new BNPL tier limits
                 response1 = client.post(
                     "/v1/decision",
-                    json={"user_id": "user_good", "amount_requested_cents": 40000},
+                    json={"user_id": "user_good", "amount_requested_cents": 5000},
                     headers={"X-Request-ID": request_id}
                 )
-                
+
                 assert response1.status_code == 200
                 decision1 = response1.json()
                 assert decision1["approved"] is True
