@@ -185,6 +185,8 @@ class RiskCalculationService:
         paycheck_info = PaycheckInfo(
             avg_paycheck_cents=int(monthly_income) if monthly_income and monthly_income > 0 else None,
             period_days=30,
+            # paycheck confidence is 80% if monthly income is positive, 0% otherwise 
+            # it represents how confident are the paycheck calculations (avg_paycheck_cents, period_days)
             paycheck_confidence=0.8 if monthly_income and monthly_income > 0 else 0.0,
         )
 

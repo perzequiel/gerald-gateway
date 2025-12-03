@@ -113,7 +113,11 @@ class ValidateDecisionService:
             decision.set_score(score)
             
             if approved:
-                amount_granted_cents = min(amount_requested_cents, risk_score['limit_amount']) # TODO : it should be amount_granted_cents NO PUEDE SER MENOR
+                # NOTE: we currently cap the granted amount by the risk-based limit.
+                # In a future iteration, this should be refactored so that amount_granted_cents
+                # is explicitly decided by the risk engine and cannot be lower than the requested
+                # amount when approved.
+                amount_granted_cents = min(amount_requested_cents, risk_score['limit_amount'])
                 # TODO : send installments_count and days_between_installments to the plan creation
                 plan = Plan.create(decision_id=decision.id, user_id=user_id, total_cents=amount_granted_cents)
                 decision.set_plan(plan=plan)

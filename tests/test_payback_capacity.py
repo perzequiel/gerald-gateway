@@ -105,7 +105,7 @@ class TestPaybackCapacity:
         )
         
         # User_good has healthy balance - payback label should be computed
-        assert result["payback_label"] in ("positive", "neutral", "negative")
+        assert result["payback_label"] == "negative"
         # Should have a reasonable capacity value (not extreme)
         assert result["payback_capacity_cents"] is not None
 

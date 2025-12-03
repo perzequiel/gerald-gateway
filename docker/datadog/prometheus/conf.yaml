@@ -1,7 +1,7 @@
 init_config:
 
 instances:
-  # Instancia principal: métricas con namespace gerald_gateway
+  # Main instance: metrics with gerald_gateway namespace
   - prometheus_url: "http://host.docker.internal:8080/metrics"
     namespace: "gerald_gateway"
     metrics:

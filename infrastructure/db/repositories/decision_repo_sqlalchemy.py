@@ -36,7 +36,7 @@ class DecisionRepoSqlalchemy(DecisionRepository):
         result = await self.db.execute(stmt)
         decision_model = result.scalar_one_or_none()
         decision_response: Decision = decision_model.to_domain() if decision_model else None
-        # si existe que intente traer el plan si esta aprobada la desicion
+        # If a decision exists and is approved, try to load the associated plan
         if decision_model and decision_model.approved:
             stmt = select(PlanModel).where(PlanModel.decision_id == decision_model.id)
             result = await self.db.execute(stmt)

@@ -19,7 +19,7 @@ try:
     from datadog_api_client.v1.api.dashboards_api import DashboardsApi
     from datadog_api_client.v1.model.dashboard import Dashboard
 except ImportError:
-    print("Error: datadog-api-client no está instalado.")
+    print("Error: datadog-api-client is not installed.")
     print("Instala con: pip install datadog-api-client")
     sys.exit(1)
 

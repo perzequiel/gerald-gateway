@@ -2,7 +2,7 @@
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Response
 
-# Métricas principales (usadas por el código)
+# Main metrics (used by the code)
 gerald_decision_total = Counter(
     "gerald_decision_total",
     "Total BNPL decisions",

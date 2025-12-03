@@ -60,7 +60,10 @@ BNPL_TIER_D_LIMIT=5000   # $50
 |----------|---------|-------------|
 | `COOLDOWN_HOURS` | 72 | Hours between allowed advances |
 
-**Effect:** User must wait this many hours after taking an advance before requesting another.
+- In code, this variable is reflected as `DEFAULT_COOLDOWN_HOURS` in `domain/services/cooldown.py`.
+- If `COOLDOWN_HOURS` is not configured in `.env`, `DEFAULT_COOLDOWN_HOURS` uses the default value of **72 hours**.
+
+**Effect:** the user must wait this number of hours from the last advance before being able to take another one (unless the value is changed in `.env`).
 
 ### Risk Calculation Weights
 

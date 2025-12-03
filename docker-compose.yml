@@ -12,7 +12,7 @@ services:
       - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
       # - DD_DOGSTATSD_SOCKET=/var/run/datadog/dsd.socket
     volumes:
-      # - /var/run/datadog:/var/run/datadog  # No necesario para Prometheus scraping
+      # - /var/run/datadog:/var/run/datadog  # Not required for Prometheus scraping
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/:/host/proc/:ro
       - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro

@@ -2,10 +2,15 @@
 Cooldown Module
 
 Implements cooldown logic to prevent users from taking multiple advances
-within a short time period (72 hours default).
+within a short time period.
+
+The default cooldown window is controlled via the COOLDOWN_HOURS
+environment variable, and exposed in code as DEFAULT_COOLDOWN_HOURS.
 """
 from datetime import datetime, timedelta
 from typing import TypedDict, Optional
+
+from domain.config import get_cooldown_config
 
 
 class CooldownResult(TypedDict):
@@ -15,8 +20,8 @@ class CooldownResult(TypedDict):
     explanation: str
 
 
-# Default cooldown period in hours
-DEFAULT_COOLDOWN_HOURS = 72
+# Default cooldown period in hours (loaded from env via domain.config)
+DEFAULT_COOLDOWN_HOURS = get_cooldown_config().cooldown_hours
 
 
 def compute_cooldown(
@@ -32,7 +37,7 @@ def compute_cooldown(
                     Look for type='advance_taken' or 'cash_advance'.
         transactions: Alternative - check transactions for advance markers
                      (description containing 'advance' or 'gerald' disbursement)
-        cooldown_hours: Cooldown period in hours (default 72)
+        cooldown_hours: Cooldown period in hours (defaults to DEFAULT_COOLDOWN_HOURS)
     
     Returns:
         CooldownResult with cooldown status and remaining time
